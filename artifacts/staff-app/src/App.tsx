@@ -87,9 +87,9 @@ type ActivityEntry = {
 // CONSTANTS
 // ────────────────────────────────────────────────────────────────────────────────
 
-const DEMO_STAFF: StaffUser = {
+const CURRENT_STAFF: StaffUser = {
   id: 'staff-01',
-  name: 'Arjun Mehta',
+  name: 'Staff operator',
   role: 'crowd_control',
   roleLabel: 'Crowd Control Officer',
   available: true,
@@ -169,7 +169,7 @@ function useStaff() {
 
 function StaffProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
-    user: DEMO_STAFF,
+    user: CURRENT_STAFF,
     alerts: [],
     platforms: [],
     activity: [],
@@ -827,8 +827,7 @@ function AuthenticatedApp() {
   const [tab, setTab] = useState<Tab>('alerts');
   return (
     <div className="staff-app">
-      <div className="demo-banner"><Shield size={12} /> DEMO MODE — Synced with CrowdFlow Dashboard</div>
-      <AppHeader />
+          <AppHeader />
       {tab === 'alerts' && <AlertsTab />}
       {tab === 'crowd' && <LiveCrowdTab />}
       {tab === 'activity' && <ActivityTab />}
