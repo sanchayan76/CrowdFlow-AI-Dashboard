@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -217,25 +217,23 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   ]);
 
   // Connect to backend
-  import('react').then(({ useEffect }) => {
-    useEffect(() => {
-      const baseUrl = import.meta.env.VITE_API_URL || '';
-      
-      fetch(`${baseUrl}/api/v1/state`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.scenario) setScenario(data.scenario);
-        })
-        .catch(() => {});
-
-      const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
-      evtSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+  useEffect(() => {
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    
+    fetch(`${baseUrl}/api/v1/state`)
+      .then(res => res.json())
+      .then(data => {
         if (data.scenario) setScenario(data.scenario);
-      };
-      return () => evtSource.close();
-    }, []);
-  });
+      })
+      .catch(() => {});
+
+    const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
+    evtSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.scenario) setScenario(data.scenario);
+    };
+    return () => evtSource.close();
+  }, []);
 
   const result = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);
   const recommendation = useMemo(() => getRecommendation(result, scenario), [result, scenario]);
