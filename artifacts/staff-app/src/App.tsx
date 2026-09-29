@@ -214,7 +214,8 @@ function StaffProvider({ children }: { children: ReactNode }) {
         evtSource?.close();
         evtSource = null;
         if (!disposed) {
-          dispatch({ type: 'SET_CONNECTION', state: 'offline' });
+          // Polling is the source-of-truth for availability. Render can
+          // interrupt long-lived SSE connections while the API remains healthy.
           reconnectTimer = setTimeout(connectStream, 3000);
         }
       };
@@ -389,7 +390,7 @@ function ConfirmDialog({ title, message, confirmLabel, confirmType = 'primary', 
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────��────────────
 // HEADER
 // ────────────────────────────────────────────────────────────────────────────────
 
