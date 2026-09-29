@@ -25,7 +25,28 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = new Set(
+  [
+    "https://crowd-flow-ai-dashboard-blush.vercel.app",
+    "https://crowdflow-ai-dashboard.vercel.app",
+    process.env.FRONTEND_URL,
+  ]
+    .filter((origin): origin is string => Boolean(origin))
+    .map((origin) => origin.replace(/\/$/, "")),
+);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Non-browser requests have no Origin header and should remain usable.
+      if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed by CORS"));
+    },
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
