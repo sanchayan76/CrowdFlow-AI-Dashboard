@@ -206,8 +206,8 @@ function useCrowdFlow() {
 }
 
 function CrowdFlowProvider({ children }: { children: ReactNode }) {
-  const [scenario, setScenario] = useState(defaultScenario);
-  const [draftScenario, setDraftScenario] = useState(defaultScenario);
+  const [scenario, setScenario] = useState<ScenarioInput>(defaultScenario);
+  const [draftScenario, setDraftScenario] = useState<ScenarioInput>(defaultScenario);
   const [thresholds, setThresholds] = useState<Thresholds>({ watch: 70, warning: 85, high: 95, critical: 100 });
   const [geminiStatus, setGeminiStatus] = useState<GeminiStatus>('idle');
   const [geminiMessage, setGeminiMessage] = useState('Paste a Gemini API key in Settings to enable free AI announcement drafts.');
@@ -215,21 +215,46 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     { language: 'English', text: 'Passengers are requested to remain in the concourse temporarily and follow station staff instructions. Please allow arriving passengers to exit first.', timestamp: '09:42', source: 'Deterministic fallback' },
     { language: 'Tamil', text: 'பயணிகள் தற்காலிகமாக கான்கோர்ஸில் காத்திருக்குமாறு கேட்டுக்கொள்ளப்படுகிறார்கள். பணியாளர்களின் அறிவுறுத்தல்களைப் பின்பற்றவும்.', timestamp: '09:18', source: 'Gemini' },
   ]);
+
+  // Connect to backend
+  import('react').then(({ useEffect }) => {
+    useEffect(() => {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      
+      fetch(`${baseUrl}/api/v1/state`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.scenario) setScenario(data.scenario);
+        })
+        .catch(() => {});
+
+      const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
+      evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.scenario) setScenario(data.scenario);
+      };
+      return () => evtSource.close();
+    }, []);
+  });
+
   const result = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);
   const recommendation = useMemo(() => getRecommendation(result, scenario), [result, scenario]);
   const setDraft = (field: keyof ScenarioInput, value: number) => {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
-  const recalculate = () => setScenario({ ...draftScenario });
-  const setThreshold = (field: keyof Thresholds, value: number) => setThresholds((current) => ({ ...current, [field]: value }));
-  const updateRecommendation = (status: Recommendation['status']) => {
-    setScenario((current) => ({ ...current }));
-    setActionStatus(status);
+  const recalculate = () => {
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    fetch(`${baseUrl}/api/v1/scenario`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draftScenario),
+    });
   };
-  const setActionStatus = (status: Recommendation['status']) => {
+  const setThreshold = (field: keyof Thresholds, value: number) => setThresholds((current) => ({ ...current, [field]: value }));
+  const [latestActionStatus, setLatestActionStatus] = useState<Recommendation['status']>('Pending');
+  const updateRecommendation = (status: Recommendation['status']) => {
     setLatestActionStatus(status);
   };
-  const [latestActionStatus, setLatestActionStatus] = useState<Recommendation['status']>('Pending');
   const displayedRecommendation = { ...recommendation, status: latestActionStatus };
 
   const testGeminiKey = async (providedKey?: string, providedModel?: string) => {
