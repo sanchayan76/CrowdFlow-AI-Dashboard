@@ -223,14 +223,20 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     fetch(`${baseUrl}/api/v1/state`)
       .then(res => res.json())
       .then(data => {
-        if (data.scenario) setScenario(data.scenario);
+        if (data.scenario) {
+          setScenario(data.scenario);
+          setDraftScenario(data.scenario);
+        }
       })
       .catch(() => {});
 
     const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
     evtSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.scenario) setScenario(data.scenario);
+      if (data.scenario) {
+        setScenario(data.scenario);
+        setDraftScenario(data.scenario);
+      }
     };
     return () => evtSource.close();
   }, []);
@@ -241,15 +247,18 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
   const recalculate = async () => {
+    const nextScenario = { ...draftScenario };
     const baseUrl = import.meta.env.VITE_API_URL || '';
+
+    // Update the forecast immediately; the API sync should not block the local calculation.
+    setScenario(nextScenario);
     try {
       const response = await fetch(`${baseUrl}/api/v1/scenario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draftScenario),
+        body: JSON.stringify(nextScenario),
       });
       if (!response.ok) throw new Error(`Forecast update failed with ${response.status}`);
-      setScenario(draftScenario);
     } catch (error) {
       console.error('[v0] Forecast update failed:', error);
     }
@@ -454,7 +463,7 @@ function ScenarioControls({ showPresets = true }: { showPresets?: boolean }) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {fields.map(([field, label, unit, min, max, step]) => <label key={field} className="block rounded-xl border border-[#a78bfa]/10 bg-[#0b0928]/35 p-3"><span className="flex items-center justify-between gap-2 text-[10px] font-bold text-[#c4b5fd]"><span>{label}</span><span className="cf-mono rounded-md bg-[#a78bfa]/10 px-2 py-1 text-[#f8f7ff]">{draftScenario[field]} {unit}</span></span><input className="mt-3 w-full accent-[#a78bfa]" type="range" min={min} max={max} step={step} value={draftScenario[field]} onChange={(event) => setDraft(field, Number(event.target.value))} data-testid={`input-${field}`} /></label>)}
     </div>
-    <button onClick={recalculate} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-recalculate"><RefreshCw size={15} /> Recalculate forecast</button>
+    <button type="button" onClick={recalculate} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-recalculate"><RefreshCw size={15} /> Recalculate forecast</button>
   </div>;
 }
 
