@@ -240,13 +240,19 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   const setDraft = (field: keyof ScenarioInput, value: number) => {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
-  const recalculate = () => {
+  const recalculate = async () => {
     const baseUrl = import.meta.env.VITE_API_URL || '';
-    fetch(`${baseUrl}/api/v1/scenario`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draftScenario),
-    });
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/scenario`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftScenario),
+      });
+      if (!response.ok) throw new Error(`Forecast update failed with ${response.status}`);
+      setScenario(draftScenario);
+    } catch (error) {
+      console.error('[v0] Forecast update failed:', error);
+    }
   };
   const setThreshold = (field: keyof Thresholds, value: number) => setThresholds((current) => ({ ...current, [field]: value }));
   const [latestActionStatus, setLatestActionStatus] = useState<Recommendation['status']>('Pending');

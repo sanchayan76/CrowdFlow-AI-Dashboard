@@ -32,7 +32,16 @@ type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 type IncidentStatus = 'NEW' | 'ACKNOWLEDGED' | 'RESPONDING' | 'RESOLVED' | 'ESCALATED';
 type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 
-type StaffUser = {
+type ScenarioInput = {
+  currentCrowd: number;
+  platformCapacity: number;
+  vehicleCapacity: number;
+  nextVehicleArrival: number;
+  recentCrowdGrowth: number;
+  followingBusArrival: number;
+};
+  
+  type StaffUser = {
   id: string;
   name: string;
   role: 'security' | 'crowd_control' | 'supervisor';
@@ -103,6 +112,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 type AppState = {
   user: StaffUser;
+  scenario: ScenarioInput;
   alerts: Alert[];
   platforms: Platform[];
   activity: ActivityEntry[];
@@ -111,6 +121,7 @@ type AppState = {
 };
 
 type AppAction =
+  | { type: 'SET_SCENARIO'; scenario: ScenarioInput }
   | { type: 'SET_ALERTS'; alerts: Alert[] }
   | { type: 'SET_PLATFORMS'; platforms: Platform[] }
   | { type: 'UPDATE_ALERT'; id: string; changes: Partial<Alert>; entry?: TimelineEntry; activityAction?: string }
@@ -119,6 +130,8 @@ type AppAction =
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'SET_SCENARIO':
+      return { ...state, scenario: action.scenario, lastSync: Date.now() };
     case 'SET_ALERTS':
       return { ...state, alerts: action.alerts, lastSync: Date.now() };
     case 'SET_PLATFORMS':
@@ -170,6 +183,14 @@ function useStaff() {
 function StaffProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
     user: DEMO_STAFF,
+    scenario: {
+      currentCrowd: 438,
+      platformCapacity: 600,
+      vehicleCapacity: 600,
+      nextVehicleArrival: 7,
+      recentCrowdGrowth: 18,
+      followingBusArrival: 14,
+    },
     alerts: [],
     platforms: [],
     activity: [],
@@ -181,6 +202,7 @@ function StaffProvider({ children }: { children: ReactNode }) {
     fetch(`${API_BASE}/api/v1/state`)
       .then(res => res.json())
       .then(data => {
+        if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
         if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
         if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
         dispatch({ type: 'SET_CONNECTION', state: 'connected' });
@@ -190,6 +212,7 @@ function StaffProvider({ children }: { children: ReactNode }) {
     const evtSource = new EventSource(`${API_BASE}/api/v1/stream`);
     evtSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
       if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
       if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
       dispatch({ type: 'SET_CONNECTION', state: 'connected' });
@@ -668,6 +691,15 @@ function LiveCrowdTab() {
 
   return (
     <div className="staff-content">
+      <div className="detail-section" style={{ marginBottom: 16 }} data-testid="staff-forecast-summary">
+        <div className="staff-section-title" style={{ marginBottom: 10 }}>Forecast briefing</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-brand-light)' }}>{state.scenario.currentCrowd.toLocaleString()}</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Current crowd</div></div>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-high)' }}>{Math.round(state.scenario.currentCrowd + state.scenario.recentCrowdGrowth * state.scenario.followingBusArrival).toLocaleString()}</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Projected demand</div></div>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-success)' }}>{state.scenario.followingBusArrival} min</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Forecast horizon</div></div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--staff-text-muted)', marginTop: 10 }}>Updated from the operations forecast in real time.</div>
+      </div>
       {/* Overall summary */}
       <div className="detail-section" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
