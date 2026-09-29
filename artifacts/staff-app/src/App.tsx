@@ -178,27 +178,57 @@ function StaffProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/state`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
-        if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
-        dispatch({ type: 'SET_CONNECTION', state: 'connected' });
-      })
-      .catch(() => dispatch({ type: 'SET_CONNECTION', state: 'offline' }));
+    let disposed = false;
+    let evtSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const evtSource = new EventSource(`${API_BASE}/api/v1/stream`);
-    evtSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    const applyState = (data: { alerts?: Alert[]; platforms?: Platform[] }) => {
       if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
       if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
       dispatch({ type: 'SET_CONNECTION', state: 'connected' });
       dispatch({ type: 'SYNC' });
     };
-    evtSource.onerror = () => {
-      dispatch({ type: 'SET_CONNECTION', state: 'offline' });
+
+    const fetchState = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/state`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`State request failed: ${response.status}`);
+        applyState(await response.json());
+      } catch {
+        if (!disposed) dispatch({ type: 'SET_CONNECTION', state: 'offline' });
+      }
     };
-    return () => evtSource.close();
+
+    const connectStream = () => {
+      if (disposed) return;
+      dispatch({ type: 'SET_CONNECTION', state: 'reconnecting' });
+      evtSource = new EventSource(`${API_BASE}/api/v1/stream`);
+      evtSource.onmessage = (event) => {
+        try {
+          applyState(JSON.parse(event.data));
+        } catch {
+          dispatch({ type: 'SET_CONNECTION', state: 'reconnecting' });
+        }
+      };
+      evtSource.onerror = () => {
+        evtSource?.close();
+        evtSource = null;
+        if (!disposed) {
+          dispatch({ type: 'SET_CONNECTION', state: 'offline' });
+          reconnectTimer = setTimeout(connectStream, 3000);
+        }
+      };
+    };
+
+    fetchState();
+    connectStream();
+    const pollTimer = setInterval(fetchState, 15000);
+    return () => {
+      disposed = true;
+      clearInterval(pollTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      evtSource?.close();
+    };
   }, []);
 
   const userName = state.user.name;

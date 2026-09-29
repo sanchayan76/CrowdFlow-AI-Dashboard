@@ -219,20 +219,50 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   // Connect to backend
   useEffect(() => {
     const baseUrl = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
-    
-    fetch(`${baseUrl}/api/v1/state`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.scenario) setScenario(data.scenario);
-      })
-      .catch(() => {});
+    let disposed = false;
+    let evtSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
-    evtSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    const applyState = (data: { scenario?: ScenarioInput }) => {
       if (data.scenario) setScenario(data.scenario);
     };
-    return () => evtSource.close();
+
+    const fetchState = async () => {
+      try {
+        const response = await fetch(`${baseUrl}/api/v1/state`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`State request failed: ${response.status}`);
+        applyState(await response.json());
+      } catch {
+        // The stream reconnects below; polling keeps data fresh if SSE is interrupted.
+      }
+    };
+
+    const connectStream = () => {
+      if (disposed) return;
+      evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
+      evtSource.onmessage = (event) => {
+        try {
+          applyState(JSON.parse(event.data));
+        } catch {
+          evtSource?.close();
+        }
+      };
+      evtSource.onerror = () => {
+        evtSource?.close();
+        evtSource = null;
+        if (!disposed) reconnectTimer = setTimeout(connectStream, 3000);
+      };
+    };
+
+    fetchState();
+    connectStream();
+    const pollTimer = setInterval(fetchState, 15000);
+    return () => {
+      disposed = true;
+      clearInterval(pollTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      evtSource?.close();
+    };
   }, []);
 
   const result = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);

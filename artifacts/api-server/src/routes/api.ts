@@ -31,8 +31,12 @@ router.get("/stream", (req, res) => {
 
   sendState(getState());
   const unsubscribe = subscribe(sendState);
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, 15000);
 
   req.on('close', () => {
+    clearInterval(heartbeat);
     unsubscribe();
   });
 });
