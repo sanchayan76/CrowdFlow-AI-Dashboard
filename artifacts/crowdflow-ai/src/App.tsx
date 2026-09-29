@@ -218,7 +218,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
 
   // Connect to backend
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const baseUrl = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
     
     fetch(`${baseUrl}/api/v1/state`)
       .then(res => res.json())
@@ -241,7 +241,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
   const recalculate = () => {
-    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const baseUrl = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
     fetch(`${baseUrl}/api/v1/scenario`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
