@@ -92,12 +92,12 @@ type Announcement = {
 type Thresholds = { watch: number; warning: number; high: number; critical: number };
 
 const defaultScenario: ScenarioInput = {
-  currentCrowd: 438,
-  platformCapacity: 600,
-  vehicleCapacity: 600,
-  nextVehicleArrival: 7,
-  recentCrowdGrowth: 18,
-  followingBusArrival: 14,
+  currentCrowd: 0,
+  platformCapacity: 0,
+  vehicleCapacity: 0,
+  nextVehicleArrival: 0,
+  recentCrowdGrowth: 0,
+  followingBusArrival: 0,
 };
 
 const stationData = [
@@ -180,7 +180,11 @@ function formatTime(date = new Date()) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+type ConnectionState = 'connecting' | 'connected' | 'offline';
+
 type CrowdFlowContextValue = {
+  connection: ConnectionState;
+  lastSync: number | null;
   scenario: ScenarioInput;
   draftScenario: ScenarioInput;
   result: ForecastResult;
@@ -206,6 +210,8 @@ function useCrowdFlow() {
 }
 
 function CrowdFlowProvider({ children }: { children: ReactNode }) {
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [lastSync, setLastSync] = useState<number | null>(null);
   const [scenario, setScenario] = useState<ScenarioInput>(defaultScenario);
   const [draftScenario, setDraftScenario] = useState<ScenarioInput>(defaultScenario);
   const [thresholds, setThresholds] = useState<Thresholds>({ watch: 70, warning: 85, high: 95, critical: 100 });
@@ -224,7 +230,11 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const applyState = (data: { scenario?: ScenarioInput }) => {
-      if (data.scenario) setScenario(data.scenario);
+      if (!data.scenario) throw new Error('Live API returned no scenario');
+      setScenario(data.scenario);
+      setDraftScenario(data.scenario);
+      setConnection('connected');
+      setLastSync(Date.now());
     };
 
     const fetchState = async () => {
@@ -233,7 +243,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error(`State request failed: ${response.status}`);
         applyState(await response.json());
       } catch {
-        // The stream reconnects below; polling keeps data fresh if SSE is interrupted.
+        setConnection('offline');
       }
     };
 
@@ -352,7 +362,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     setAnnouncements((current) => [announcement, ...current]);
     return announcement;
   };
-  const value = { scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey };
+  const value = { connection, lastSync, scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey };
   return <CrowdFlowContext.Provider value={value}>{children}</CrowdFlowContext.Provider>;
 }
 
@@ -371,6 +381,9 @@ function Brand() {
 }
 
 function Sidebar({ page }: { page: Page }) {
+  const { connection } = useCrowdFlow();
+  const status = connection === 'connected' ? 'Live data connected' : connection === 'connecting' ? 'Connecting to live data' : 'Live data unavailable';
+  const dotClass = connection === 'connected' ? 'bg-[#67e8a5]' : connection === 'connecting' ? 'bg-[#f0bd69] animate-pulse' : 'bg-[#fb7185]';
   return (
     <aside className="cf-sidebar">
       <Brand />
@@ -383,8 +396,8 @@ function Sidebar({ page }: { page: Page }) {
           </Link>
         ))}
       </nav>
-      <div className="mt-auto cf-side-caption rounded-xl border border-[#a78bfa]/10 bg-[#151044]/60 p-3">
-        <div className="flex items-center gap-2 text-[10px] font-bold text-[#c4b5fd]"><span className="h-2 w-2 rounded-full bg-[#67e8a5]" /> System nominal</div>
+<div className="mt-auto cf-side-caption rounded-xl border border-[#a78bfa]/10 bg-[#151044]/60 p-3">
+  <div className="flex items-center gap-2 text-[10px] font-bold text-[#c4b5fd]"><span className={`h-2 w-2 rounded-full ${dotClass}`} /> {status}</div>
         <p className="mt-2 text-[10px] leading-relaxed text-[#8f88b5]">Forecasts are estimates based on current operating data.</p>
       </div>
     </aside>
@@ -392,6 +405,7 @@ function Sidebar({ page }: { page: Page }) {
 }
 
 function Topbar({ page }: { page: Page }) {
+  const { connection, lastSync } = useCrowdFlow();
   const labels: Record<Page, [string, string]> = {
     overview: ['Overview', 'Current operating picture'],
     live: ['Live Crowd', 'Observe station movement'],
@@ -407,7 +421,7 @@ function Topbar({ page }: { page: Page }) {
         <div><div className="text-xl font-extrabold tracking-[-.04em] text-[#f8f7ff]">{labels[page][0]}</div><div className="mt-1 text-xs text-[#8f88b5]">{labels[page][1]}</div></div>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden items-center gap-2 rounded-full border border-[#a78bfa]/12 bg-[#100c35]/60 px-3 py-2 text-[10px] font-bold text-[#8f88b5] sm:flex"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#67e8a5]" /> LIVE · 09:48</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#a78bfa]/12 bg-[#100c35]/60 px-3 py-2 text-[10px] font-bold text-[#8f88b5] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${connection === 'connected' ? 'bg-[#67e8a5]' : connection === 'connecting' ? 'bg-[#f0bd69] animate-pulse' : 'bg-[#fb7185]'}`} /> {connection === 'connected' ? `LIVE · ${lastSync ? formatTime(new Date(lastSync)) : 'SYNCING'}` : connection === 'connecting' ? 'CONNECTING' : 'OFFLINE'}</div>
         <button className="relative rounded-lg border border-[#a78bfa]/12 bg-[#100c35]/60 p-2.5 text-[#8f88b5] hover:text-[#f8f7ff]" aria-label="View alerts" data-testid="button-view-alerts"><Bell size={16} /><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ec4899]" /></button>
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#ec4899] text-[10px] font-black text-[#0b0928]" data-testid="text-operator-avatar">OP</div>
       </div>
