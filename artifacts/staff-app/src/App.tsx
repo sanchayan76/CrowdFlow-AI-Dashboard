@@ -32,7 +32,16 @@ type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 type IncidentStatus = 'NEW' | 'ACKNOWLEDGED' | 'RESPONDING' | 'RESOLVED' | 'ESCALATED';
 type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 
-type StaffUser = {
+type ScenarioInput = {
+  currentCrowd: number;
+  platformCapacity: number;
+  vehicleCapacity: number;
+  nextVehicleArrival: number;
+  recentCrowdGrowth: number;
+  followingBusArrival: number;
+};
+  
+  type StaffUser = {
   id: string;
   name: string;
   role: 'security' | 'crowd_control' | 'supervisor';
@@ -87,15 +96,15 @@ type ActivityEntry = {
 // CONSTANTS
 // ────────────────────────────────────────────────────────────────────────────────
 
-const CURRENT_STAFF: StaffUser = {
+const DEMO_STAFF: StaffUser = {
   id: 'staff-01',
-  name: 'Staff operator',
+  name: 'Arjun Mehta',
   role: 'crowd_control',
   roleLabel: 'Crowd Control Officer',
   available: true,
 };
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ────────────────────────────────────────────────────────────────────────────────
 // STATE MANAGEMENT
@@ -103,6 +112,7 @@ const API_BASE = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboar
 
 type AppState = {
   user: StaffUser;
+  scenario: ScenarioInput;
   alerts: Alert[];
   platforms: Platform[];
   activity: ActivityEntry[];
@@ -111,6 +121,7 @@ type AppState = {
 };
 
 type AppAction =
+  | { type: 'SET_SCENARIO'; scenario: ScenarioInput }
   | { type: 'SET_ALERTS'; alerts: Alert[] }
   | { type: 'SET_PLATFORMS'; platforms: Platform[] }
   | { type: 'UPDATE_ALERT'; id: string; changes: Partial<Alert>; entry?: TimelineEntry; activityAction?: string }
@@ -119,6 +130,8 @@ type AppAction =
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'SET_SCENARIO':
+      return { ...state, scenario: action.scenario, lastSync: Date.now() };
     case 'SET_ALERTS':
       return { ...state, alerts: action.alerts, lastSync: Date.now() };
     case 'SET_PLATFORMS':
@@ -169,7 +182,15 @@ function useStaff() {
 
 function StaffProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
-    user: CURRENT_STAFF,
+    user: DEMO_STAFF,
+    scenario: {
+      currentCrowd: 438,
+      platformCapacity: 600,
+      vehicleCapacity: 600,
+      nextVehicleArrival: 7,
+      recentCrowdGrowth: 18,
+      followingBusArrival: 14,
+    },
     alerts: [],
     platforms: [],
     activity: [],
@@ -178,58 +199,29 @@ function StaffProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    let disposed = false;
-    let evtSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    fetch(`${API_BASE}/api/v1/state`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
+        if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
+        if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
+        dispatch({ type: 'SET_CONNECTION', state: 'connected' });
+      })
+      .catch(() => dispatch({ type: 'SET_CONNECTION', state: 'offline' }));
 
-    const applyState = (data: { alerts?: Alert[]; platforms?: Platform[] }) => {
+    const evtSource = new EventSource(`${API_BASE}/api/v1/stream`);
+    evtSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
       if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
       if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
       dispatch({ type: 'SET_CONNECTION', state: 'connected' });
       dispatch({ type: 'SYNC' });
     };
-
-    const fetchState = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/v1/state`, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`State request failed: ${response.status}`);
-        applyState(await response.json());
-      } catch {
-        if (!disposed) dispatch({ type: 'SET_CONNECTION', state: 'offline' });
-      }
+    evtSource.onerror = () => {
+      dispatch({ type: 'SET_CONNECTION', state: 'offline' });
     };
-
-    const connectStream = () => {
-      if (disposed) return;
-      dispatch({ type: 'SET_CONNECTION', state: 'reconnecting' });
-      evtSource = new EventSource(`${API_BASE}/api/v1/stream`);
-      evtSource.onmessage = (event) => {
-        try {
-          applyState(JSON.parse(event.data));
-        } catch {
-          dispatch({ type: 'SET_CONNECTION', state: 'reconnecting' });
-        }
-      };
-      evtSource.onerror = () => {
-        evtSource?.close();
-        evtSource = null;
-        if (!disposed) {
-          // Polling is the source-of-truth for availability. Render can
-          // interrupt long-lived SSE connections while the API remains healthy.
-          reconnectTimer = setTimeout(connectStream, 3000);
-        }
-      };
-    };
-
-    fetchState();
-    connectStream();
-    const pollTimer = setInterval(fetchState, 15000);
-    return () => {
-      disposed = true;
-      clearInterval(pollTimer);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      evtSource?.close();
-    };
+    return () => evtSource.close();
   }, []);
 
   const userName = state.user.name;
@@ -390,7 +382,7 @@ function ConfirmDialog({ title, message, confirmLabel, confirmType = 'primary', 
   );
 }
 
-// ───────────────────────────────────────────────────────────────────��────────────
+// ────────────────────────────────────────────────────────────────────────────────
 // HEADER
 // ────────────────────────────────────────────────────────────────────────────────
 
@@ -699,6 +691,15 @@ function LiveCrowdTab() {
 
   return (
     <div className="staff-content">
+      <div className="detail-section" style={{ marginBottom: 16 }} data-testid="staff-forecast-summary">
+        <div className="staff-section-title" style={{ marginBottom: 10 }}>Forecast briefing</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-brand-light)' }}>{state.scenario.currentCrowd.toLocaleString()}</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Current crowd</div></div>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-high)' }}>{Math.round(state.scenario.currentCrowd + state.scenario.recentCrowdGrowth * state.scenario.followingBusArrival).toLocaleString()}</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Projected demand</div></div>
+          <div style={{ background: 'var(--staff-bg)', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--staff-success)' }}>{state.scenario.followingBusArrival} min</div><div style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>Forecast horizon</div></div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--staff-text-muted)', marginTop: 10 }}>Updated from the operations forecast in real time.</div>
+      </div>
       {/* Overall summary */}
       <div className="detail-section" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -858,7 +859,8 @@ function AuthenticatedApp() {
   const [tab, setTab] = useState<Tab>('alerts');
   return (
     <div className="staff-app">
-          <AppHeader />
+      <div className="demo-banner"><Shield size={12} /> DEMO MODE — Synced with CrowdFlow Dashboard</div>
+      <AppHeader />
       {tab === 'alerts' && <AlertsTab />}
       {tab === 'crowd' && <LiveCrowdTab />}
       {tab === 'activity' && <ActivityTab />}

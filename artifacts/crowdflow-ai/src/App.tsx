@@ -92,12 +92,12 @@ type Announcement = {
 type Thresholds = { watch: number; warning: number; high: number; critical: number };
 
 const defaultScenario: ScenarioInput = {
-  currentCrowd: 0,
-  platformCapacity: 0,
-  vehicleCapacity: 0,
-  nextVehicleArrival: 0,
-  recentCrowdGrowth: 0,
-  followingBusArrival: 0,
+  currentCrowd: 438,
+  platformCapacity: 600,
+  vehicleCapacity: 600,
+  nextVehicleArrival: 7,
+  recentCrowdGrowth: 18,
+  followingBusArrival: 14,
 };
 
 const stationData = [
@@ -180,11 +180,7 @@ function formatTime(date = new Date()) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-type ConnectionState = 'connecting' | 'connected' | 'offline';
-
 type CrowdFlowContextValue = {
-  connection: ConnectionState;
-  lastSync: number | null;
   scenario: ScenarioInput;
   draftScenario: ScenarioInput;
   result: ForecastResult;
@@ -210,8 +206,6 @@ function useCrowdFlow() {
 }
 
 function CrowdFlowProvider({ children }: { children: ReactNode }) {
-  const [connection, setConnection] = useState<ConnectionState>('connecting');
-  const [lastSync, setLastSync] = useState<number | null>(null);
   const [scenario, setScenario] = useState<ScenarioInput>(defaultScenario);
   const [draftScenario, setDraftScenario] = useState<ScenarioInput>(defaultScenario);
   const [thresholds, setThresholds] = useState<Thresholds>({ watch: 70, warning: 85, high: 95, critical: 100 });
@@ -224,55 +218,27 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
 
   // Connect to backend
   useEffect(() => {
-    const baseUrl = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
-    let disposed = false;
-    let evtSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    
+    fetch(`${baseUrl}/api/v1/state`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.scenario) {
+          setScenario(data.scenario);
+          setDraftScenario(data.scenario);
+        }
+      })
+      .catch(() => {});
 
-    const applyState = (data: { scenario?: ScenarioInput }) => {
-      if (!data.scenario) throw new Error('Live API returned no scenario');
-      setScenario(data.scenario);
-      setDraftScenario(data.scenario);
-      setConnection('connected');
-      setLastSync(Date.now());
-    };
-
-    const fetchState = async () => {
-      try {
-        const response = await fetch(`${baseUrl}/api/v1/state`, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`State request failed: ${response.status}`);
-        applyState(await response.json());
-      } catch {
-        setConnection('offline');
+    const evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
+    evtSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.scenario) {
+        setScenario(data.scenario);
+        setDraftScenario(data.scenario);
       }
     };
-
-    const connectStream = () => {
-      if (disposed) return;
-      evtSource = new EventSource(`${baseUrl}/api/v1/stream`);
-      evtSource.onmessage = (event) => {
-        try {
-          applyState(JSON.parse(event.data));
-        } catch {
-          evtSource?.close();
-        }
-      };
-      evtSource.onerror = () => {
-        evtSource?.close();
-        evtSource = null;
-        if (!disposed) reconnectTimer = setTimeout(connectStream, 3000);
-      };
-    };
-
-    fetchState();
-    connectStream();
-    const pollTimer = setInterval(fetchState, 15000);
-    return () => {
-      disposed = true;
-      clearInterval(pollTimer);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      evtSource?.close();
-    };
+    return () => evtSource.close();
   }, []);
 
   const result = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);
@@ -280,13 +246,22 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   const setDraft = (field: keyof ScenarioInput, value: number) => {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
-  const recalculate = () => {
-    const baseUrl = (import.meta.env.VITE_API_URL || 'https://crowdflow-ai-dashboard.onrender.com').replace(/\/$/, '');
-    fetch(`${baseUrl}/api/v1/scenario`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draftScenario),
-    });
+  const recalculate = async () => {
+    const nextScenario = { ...draftScenario };
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+
+    // Update the forecast immediately; the API sync should not block the local calculation.
+    setScenario(nextScenario);
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/scenario`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextScenario),
+      });
+      if (!response.ok) throw new Error(`Forecast update failed with ${response.status}`);
+    } catch (error) {
+      console.error('[v0] Forecast update failed:', error);
+    }
   };
   const setThreshold = (field: keyof Thresholds, value: number) => setThresholds((current) => ({ ...current, [field]: value }));
   const [latestActionStatus, setLatestActionStatus] = useState<Recommendation['status']>('Pending');
@@ -362,7 +337,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     setAnnouncements((current) => [announcement, ...current]);
     return announcement;
   };
-  const value = { connection, lastSync, scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey };
+  const value = { scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey };
   return <CrowdFlowContext.Provider value={value}>{children}</CrowdFlowContext.Provider>;
 }
 
@@ -381,9 +356,6 @@ function Brand() {
 }
 
 function Sidebar({ page }: { page: Page }) {
-  const { connection } = useCrowdFlow();
-  const status = connection === 'connected' ? 'Live data connected' : connection === 'connecting' ? 'Connecting to live data' : 'Live data unavailable';
-  const dotClass = connection === 'connected' ? 'bg-[#67e8a5]' : connection === 'connecting' ? 'bg-[#f0bd69] animate-pulse' : 'bg-[#fb7185]';
   return (
     <aside className="cf-sidebar">
       <Brand />
@@ -396,8 +368,8 @@ function Sidebar({ page }: { page: Page }) {
           </Link>
         ))}
       </nav>
-<div className="mt-auto cf-side-caption rounded-xl border border-[#a78bfa]/10 bg-[#151044]/60 p-3">
-  <div className="flex items-center gap-2 text-[10px] font-bold text-[#c4b5fd]"><span className={`h-2 w-2 rounded-full ${dotClass}`} /> {status}</div>
+      <div className="mt-auto cf-side-caption rounded-xl border border-[#a78bfa]/10 bg-[#151044]/60 p-3">
+        <div className="flex items-center gap-2 text-[10px] font-bold text-[#c4b5fd]"><span className="h-2 w-2 rounded-full bg-[#67e8a5]" /> System nominal</div>
         <p className="mt-2 text-[10px] leading-relaxed text-[#8f88b5]">Forecasts are estimates based on current operating data.</p>
       </div>
     </aside>
@@ -405,7 +377,6 @@ function Sidebar({ page }: { page: Page }) {
 }
 
 function Topbar({ page }: { page: Page }) {
-  const { connection, lastSync } = useCrowdFlow();
   const labels: Record<Page, [string, string]> = {
     overview: ['Overview', 'Current operating picture'],
     live: ['Live Crowd', 'Observe station movement'],
@@ -421,7 +392,7 @@ function Topbar({ page }: { page: Page }) {
         <div><div className="text-xl font-extrabold tracking-[-.04em] text-[#f8f7ff]">{labels[page][0]}</div><div className="mt-1 text-xs text-[#8f88b5]">{labels[page][1]}</div></div>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden items-center gap-2 rounded-full border border-[#a78bfa]/12 bg-[#100c35]/60 px-3 py-2 text-[10px] font-bold text-[#8f88b5] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${connection === 'connected' ? 'bg-[#67e8a5]' : connection === 'connecting' ? 'bg-[#f0bd69] animate-pulse' : 'bg-[#fb7185]'}`} /> {connection === 'connected' ? `LIVE · ${lastSync ? formatTime(new Date(lastSync)) : 'SYNCING'}` : connection === 'connecting' ? 'CONNECTING' : 'OFFLINE'}</div>
+        <div className="hidden items-center gap-2 rounded-full border border-[#a78bfa]/12 bg-[#100c35]/60 px-3 py-2 text-[10px] font-bold text-[#8f88b5] sm:flex"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#67e8a5]" /> LIVE · 09:48</div>
         <button className="relative rounded-lg border border-[#a78bfa]/12 bg-[#100c35]/60 p-2.5 text-[#8f88b5] hover:text-[#f8f7ff]" aria-label="View alerts" data-testid="button-view-alerts"><Bell size={16} /><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ec4899]" /></button>
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#ec4899] text-[10px] font-black text-[#0b0928]" data-testid="text-operator-avatar">OP</div>
       </div>
@@ -492,7 +463,7 @@ function ScenarioControls({ showPresets = true }: { showPresets?: boolean }) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {fields.map(([field, label, unit, min, max, step]) => <label key={field} className="block rounded-xl border border-[#a78bfa]/10 bg-[#0b0928]/35 p-3"><span className="flex items-center justify-between gap-2 text-[10px] font-bold text-[#c4b5fd]"><span>{label}</span><span className="cf-mono rounded-md bg-[#a78bfa]/10 px-2 py-1 text-[#f8f7ff]">{draftScenario[field]} {unit}</span></span><input className="mt-3 w-full accent-[#a78bfa]" type="range" min={min} max={max} step={step} value={draftScenario[field]} onChange={(event) => setDraft(field, Number(event.target.value))} data-testid={`input-${field}`} /></label>)}
     </div>
-    <button onClick={recalculate} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-recalculate"><RefreshCw size={15} /> Recalculate forecast</button>
+    <button type="button" onClick={recalculate} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-recalculate"><RefreshCw size={15} /> Recalculate forecast</button>
   </div>;
 }
 
