@@ -28146,7 +28146,7 @@ var require_pino = __commonJS({
     function pinoBundlerAbsolutePath(p) {
       try {
         const path = __require("path");
-        const outputDir = "/home/ayan/Projects/CrowdFlow-AI-Dashboard/artifacts/api-server/dist";
+        const outputDir = "/vercel/share/v0-project/artifacts/api-server/dist";
         return path.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
@@ -32751,7 +32751,16 @@ app.use(
     }
   })
 );
-app.use((0, import_cors.default)());
+var allowedOrigins = [
+  "https://crowd-flow-ai-dashboard-blush.vercel.app",
+  "https://crowdflow-ai-dashboard.vercel.app",
+  process.env.FRONTEND_URL
+].filter((origin) => Boolean(origin));
+app.use(
+  (0, import_cors.default)({
+    origin: allowedOrigins
+  })
+);
 app.use(import_express4.default.json());
 app.use(import_express4.default.urlencoded({ extended: true }));
 app.use("/api", routes_default);
