@@ -1,16 +1,9 @@
 // Service Worker — CrowdFlow Staff PWA
-const CACHE_NAME = 'cf-staff-shell-v1';
-const SHELL_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/favicon.svg',
-  '/icon-192.svg',
-];
+const CACHE_NAME = 'cf-staff-shell-v2';
+const SHELL_ASSETS = ['/', '/manifest.json', '/favicon.svg', '/icon-192.svg'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)));
   self.skipWaiting();
 });
 
@@ -24,15 +17,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network-first for API calls and HTML navigation
-  if (event.request.url.includes('/api/') || event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request).then((r) => r || caches.match('/')))
-    );
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // Never touch API calls, live streams, other sites, or non-GET requests
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // Network-first for page navigation, fall back to cached shell when offline
+  if (req.mode === 'navigate') {
+    event.respondWith(fetch(req).catch(() => caches.match('/')));
     return;
   }
-  // Cache-first for static assets
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+
+  // Cache-first for this site's own static files
+  event.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
 });
