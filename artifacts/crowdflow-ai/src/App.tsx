@@ -118,7 +118,9 @@ const navItems: Array<{ href: string; page: Page; label: string; icon: typeof La
   { href: '/', page: 'overview', label: 'Overview', icon: LayoutDashboard },
   { href: '/live-crowd', page: 'live', label: 'Live Crowd', icon: Radio },
   { href: '/forecast', page: 'forecast', label: 'Forecast', icon: TrendingUp },
-  { href: '/settings', page: 'settings', label: 'Settings', icon: Settings2 },
+  { href: '/actions', page: 'actions', label: 'Actions', icon: ListChecks as any },
+  { href: '/announcements', page: 'announcements', label: 'Announcements', icon: Radio as any },
+  { href: '/settings', page: 'settings', label: 'Settings', icon: Settings2 as any },
 ];
 
 function calculateForecast(input: ScenarioInput, thresholds: Thresholds): ForecastResult {
@@ -195,6 +197,8 @@ type CrowdFlowContextValue = {
   geminiStatus: GeminiStatus;
   geminiMessage: string;
   testGeminiKey: (key?: string, model?: string) => Promise<boolean>;
+  activePlatformId: string;
+  setActivePlatformId: (id: string) => void;
 };
 
 const CrowdFlowContext = createContext<CrowdFlowContextValue | null>(null);
@@ -215,6 +219,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     { language: 'English', text: 'Passengers are requested to remain in the concourse temporarily and follow station staff instructions. Please allow arriving passengers to exit first.', timestamp: '09:42', source: 'Deterministic fallback' },
     { language: 'Tamil', text: 'பயணிகள் தற்காலிகமாக கான்கோர்ஸில் காத்திருக்குமாறு கேட்டுக்கொள்ளப்படுகிறார்கள். பணியாளர்களின் அறிவுறுத்தல்களைப் பின்பற்றவும்.', timestamp: '09:18', source: 'Gemini' },
   ]);
+  const [activePlatformId, setActivePlatformId] = useState('p1');
 
   // Connect to backend
   useEffect(() => {
@@ -241,16 +246,18 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
     return () => evtSource.close();
   }, []);
 
-  const result = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);
+  const defaultResult = useMemo(() => calculateForecast(scenario, thresholds), [scenario, thresholds]);
+  const result = (scenario as any)._aiResult ? { ...defaultResult, ...(scenario as any)._aiResult } : defaultResult;
   const recommendation = useMemo(() => getRecommendation(result, scenario), [result, scenario]);
   const setDraft = (field: keyof ScenarioInput, value: number) => {
     setDraftScenario((current) => ({ ...current, [field]: Number.isFinite(value) ? value : 0 }));
   };
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+
   const recalculate = async () => {
     const nextScenario = { ...draftScenario };
     const baseUrl = import.meta.env.VITE_API_URL || '';
 
-    // Update the forecast immediately; the API sync should not block the local calculation.
     setScenario(nextScenario);
     try {
       const response = await fetch(`${baseUrl}/api/v1/scenario`, {
@@ -259,6 +266,30 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(nextScenario),
       });
       if (!response.ok) throw new Error(`Forecast update failed with ${response.status}`);
+      
+      const apiKey = window.localStorage.getItem('crowdflow-gemini-key') ?? '';
+      const model = window.localStorage.getItem('crowdflow-gemini-model') || 'gemini-2.5-flash-lite';
+      
+      const simulateRes = await fetch(`${baseUrl}/api/v1/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: nextScenario, language: 'English', apiKey, model }),
+      });
+      
+      if (simulateRes.ok) {
+        const simData = await simulateRes.json();
+        if (simData.forecast) {
+          // override the deterministic result with AI result
+          setScenario((prev) => ({ ...prev, _aiResult: simData.forecast } as any));
+        }
+        if (simData.aiAnalysis) {
+           setAiAnalysis(simData.aiAnalysis);
+           setAnnouncements(current => [
+             { language: 'English', text: simData.aiAnalysis.paAnnouncement, timestamp: formatTime(), source: 'Gemini' },
+             ...current
+           ]);
+        }
+      }
     } catch (error) {
       console.error('[v0] Forecast update failed:', error);
     }
@@ -268,7 +299,14 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   const updateRecommendation = (status: Recommendation['status']) => {
     setLatestActionStatus(status);
   };
-  const displayedRecommendation = { ...recommendation, status: latestActionStatus };
+  
+  const displayedRecommendation = aiAnalysis ? {
+    action: aiAnalysis.recommendedMove,
+    label: aiAnalysis.recommendedMove,
+    reason: aiAnalysis.reason,
+    priority: 'High' as any,
+    status: latestActionStatus,
+  } : { ...recommendation, status: latestActionStatus };
 
   const testGeminiKey = async (providedKey?: string, providedModel?: string) => {
     const key = (providedKey ?? window.localStorage.getItem('crowdflow-gemini-key') ?? '').trim();
@@ -298,46 +336,42 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
   };
 
   const generateAnnouncement = async (language: string) => {
-    const key = window.localStorage.getItem('crowdflow-gemini-key') ?? '';
-    const model = window.localStorage.getItem('crowdflow-gemini-model') || 'gemini-2.5-flash-lite';
     const fallbackText = language === 'Tamil'
       ? 'பயணிகள் தற்காலிகமாக கான்கோர்ஸில் காத்திருக்குமாறு கேட்டுக்கொள்ளப்படுகிறார்கள். பணியாளர்களின் அறிவுறுத்தல்களைப் பின்பற்றவும்.'
       : language === 'Hindi'
         ? 'यात्रियों से अनुरोध है कि वे कुछ समय के लिए कॉनकोर्स में प्रतीक्षा करें और स्टेशन कर्मचारियों के निर्देशों का पालन करें।'
         : 'Passengers are requested to remain in the concourse temporarily and follow station staff instructions. Please allow arriving passengers to exit first.';
+        
     let text = fallbackText;
     let source: AnnouncementSource = 'Deterministic fallback';
-    if (key) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `Draft one short, calm public station announcement in ${language}. Do not claim certainty. Station: Central Terminal. Platform risk: ${result.risk}. Recommended response: ${displayedRecommendation.label}. Next vehicle arrives in ${scenario.nextVehicleArrival} minutes. Return only the announcement text.` }] }],
-          }),
-        });
-        if (!response.ok) {
-          setGeminiStatus('error');
-          setGeminiMessage('Gemini rejected the request. Check the saved key and selected model.');
-          throw new Error('Gemini request failed');
-        }
-        const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-        const modelText = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (modelText) {
-          text = modelText;
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+
+    const apiKey = window.localStorage.getItem('crowdflow-gemini-key') ?? '';
+    const model = window.localStorage.getItem('crowdflow-gemini-model') || 'gemini-2.5-flash-lite';
+
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario, language, apiKey, model }),
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.aiAnalysis && payload.aiAnalysis.paAnnouncement && !payload.aiAnalysis.paAnnouncement.includes("unavailable")) {
+          text = payload.aiAnalysis.paAnnouncement;
           source = 'Gemini';
           setGeminiStatus('connected');
-          setGeminiMessage(`Connected to ${model}. Gemini draft generated successfully.`);
+          setGeminiMessage(`Connected to backend. Gemini draft generated successfully.`);
         }
-      } catch {
-        source = 'Deterministic fallback';
       }
+    } catch {
+      source = 'Deterministic fallback';
     }
     const announcement = { language, text, timestamp: formatTime(), source };
     setAnnouncements((current) => [announcement, ...current]);
     return announcement;
   };
-  const value = { scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey };
+  const value = { scenario, draftScenario, result, recommendation: displayedRecommendation, thresholds, announcements, setDraft, recalculate, setThreshold, updateRecommendation, generateAnnouncement, geminiStatus, geminiMessage, testGeminiKey, activePlatformId, setActivePlatformId };
   return <CrowdFlowContext.Provider value={value}>{children}</CrowdFlowContext.Provider>;
 }
 
@@ -451,15 +485,35 @@ function ScenarioControls({ showPresets = true }: { showPresets?: boolean }) {
       Normal: { ...defaultScenario, currentCrowd: 280, platformCapacity: 600, vehicleCapacity: 600, nextVehicleArrival: 4, recentCrowdGrowth: 8, followingBusArrival: 12 },
       Busy: { ...defaultScenario, currentCrowd: 450, platformCapacity: 600, vehicleCapacity: 600, nextVehicleArrival: 8, recentCrowdGrowth: 23, followingBusArrival: 18 },
       Delayed: { ...defaultScenario, currentCrowd: 470, platformCapacity: 600, vehicleCapacity: 600, nextVehicleArrival: 18, recentCrowdGrowth: 18, followingBusArrival: 28 },
-      'Near capacity': { ...defaultScenario, currentCrowd: 545, platformCapacity: 600, vehicleCapacity: 600, nextVehicleArrival: 9, recentCrowdGrowth: 15, followingBusArrival: 16 },
+      'Demo: Near Miss': { currentCrowd: 360, platformCapacity: 600, vehicleCapacity: 400, nextVehicleArrival: 14, recentCrowdGrowth: 10, followingBusArrival: 12 },
       Critical: { ...defaultScenario, currentCrowd: 590, platformCapacity: 600, vehicleCapacity: 500, nextVehicleArrival: 16, recentCrowdGrowth: 28, followingBusArrival: 26 },
     };
     const next = presets[name];
     Object.entries(next).forEach(([field, value]) => setDraft(field as keyof ScenarioInput, value));
   };
+  const { activePlatformId, setActivePlatformId } = useCrowdFlow();
+  const setPlatform = (platformId: string) => {
+    if (!platformId) return;
+    setActivePlatformId(platformId);
+    const platform = platforms.find(p => p.id === platformId);
+    if (platform) {
+      setDraft('currentCrowd', platform.crowd);
+      setDraft('platformCapacity', platform.capacity);
+      setDraft('nextVehicleArrival', parseInt(platform.next) || 0);
+    }
+  };
   return <div className="cf-panel p-5 sm:p-6" data-testid="panel-scenario-controls">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><div className="cf-label mb-2">Prediction inputs</div><h3 className="m-0 text-base font-extrabold text-[#f8f7ff]">Six signals only</h3><p className="mt-1 text-xs text-[#8f88b5]">Prediction uses current crowd, both capacities, both arrival times, and recent growth.</p></div><Zap size={18} className="text-[#c4b5fd]" /></div>
-    {showPresets && <div className="mb-5 flex flex-wrap gap-2">{['Normal', 'Busy', 'Delayed', 'Near capacity', 'Critical'].map((preset) => <button key={preset} onClick={() => setPreset(preset)} className="cf-btn cf-btn-quiet h-8 px-3 text-[10px]" data-testid={`button-preset-${preset.toLowerCase().replaceAll(' ', '-')}`}>{preset}</button>)}</div>}
+    
+    <div className="mb-4">
+      <label className="block text-[10px] font-bold text-[#c4b5fd] mb-1.5">Load from platform</label>
+      <select className="cf-select w-full" onChange={(e) => setPlatform(e.target.value)} defaultValue="" data-testid="select-scenario-platform">
+        <option value="" disabled>Select a platform to copy its current stats...</option>
+        {platforms.map(p => <option key={p.id} value={p.id}>{p.name} ({p.crowd} people)</option>)}
+      </select>
+    </div>
+
+    {showPresets && <div className="mb-5 flex flex-wrap gap-2">{['Normal', 'Busy', 'Delayed', 'Demo: Near Miss', 'Critical'].map((preset) => <button key={preset} onClick={() => setPreset(preset)} className="cf-btn cf-btn-quiet h-8 px-3 text-[10px]" data-testid={`button-preset-${preset.toLowerCase().replaceAll(' ', '-')}`}>{preset}</button>)}</div>}
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {fields.map(([field, label, unit, min, max, step]) => <label key={field} className="block rounded-xl border border-[#a78bfa]/10 bg-[#0b0928]/35 p-3"><span className="flex items-center justify-between gap-2 text-[10px] font-bold text-[#c4b5fd]"><span>{label}</span><span className="cf-mono rounded-md bg-[#a78bfa]/10 px-2 py-1 text-[#f8f7ff]">{draftScenario[field]} {unit}</span></span><input className="mt-3 w-full accent-[#a78bfa]" type="range" min={min} max={max} step={step} value={draftScenario[field]} onChange={(event) => setDraft(field, Number(event.target.value))} data-testid={`input-${field}`} /></label>)}
     </div>
@@ -502,17 +556,17 @@ function Overview() {
 
 function LiveCrowd() {
   const [station, setStation] = useState('Central Terminal');
-  const [selected, setSelected] = useState('p1');
-  const { scenario } = useCrowdFlow();
+  const { scenario, activePlatformId } = useCrowdFlow();
+  const [selected, setSelected] = useState(activePlatformId);
   const chosen = platforms.find((platform) => platform.id === selected) ?? platforms[0];
   const trend = [321, 344, 368, 391, 402, 415, 426, scenario.currentCrowd];
   return <PageFrame page="live">
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><div className="cf-label mb-2">Live monitoring</div><h1 className="m-0 text-2xl font-extrabold tracking-[-.05em] text-[#f8f7ff]">Where people are now</h1><p className="mt-2 text-sm text-[#8f88b5]">Sensor and operator snapshots · updated every 30 seconds</p></div><div className="flex gap-2"><select className="cf-select w-auto min-w-[170px]" value={station} onChange={(event) => setStation(event.target.value)} data-testid="select-live-station"><option>Central Terminal</option><option>Harbour Exchange</option><option>Northgate</option></select><select className="cf-select w-auto" value={selected} onChange={(event) => setSelected(event.target.value)} data-testid="select-live-platform">{platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}</select></div></div>
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[.8fr_1.2fr]">
-      <div className="cf-panel p-5 sm:p-6"><div className="cf-label mb-4">Selected platform</div><div className="flex items-end justify-between"><div><div className="text-3xl font-extrabold tracking-[-.07em] text-[#f8f7ff]" data-testid="text-selected-crowd">{chosen.id === 'p1' ? scenario.currentCrowd : chosen.crowd}</div><div className="mt-1 text-xs text-[#8f88b5]">people present · {chosen.destination}</div></div><RiskBadge risk={chosen.crowd / chosen.capacity * 100 >= 85 ? 'WARNING' : 'WATCH'} /></div><div className="mt-7"><div className="mb-2 flex justify-between text-[10px] text-[#8f88b5]"><span>Occupancy</span><span className="cf-mono text-[#c4b5fd]">{((chosen.id === 'p1' ? scenario.currentCrowd : chosen.crowd) / chosen.capacity * 100).toFixed(1)}%</span></div><CrowdProgress value={(chosen.id === 'p1' ? scenario.currentCrowd : chosen.crowd) / chosen.capacity * 100} /><div className="mt-3 flex justify-between text-[10px] text-[#8f88b5]"><span>Capacity</span><span className="cf-mono">{chosen.capacity} people</span></div></div><div className="mt-8 grid grid-cols-2 gap-2"><div className="rounded-xl bg-[#0b0928]/70 p-3"><div className="cf-label">Next arrival</div><div className="mt-2 text-sm font-extrabold text-[#f8f7ff]">{chosen.next}</div></div><div className="rounded-xl bg-[#0b0928]/70 p-3"><div className="cf-label">Last update</div><div className="mt-2 text-sm font-extrabold text-[#f8f7ff]">18 sec ago</div></div></div></div>
+      <div className="cf-panel p-5 sm:p-6"><div className="cf-label mb-4">Selected platform</div><div className="flex items-end justify-between"><div><div className="text-3xl font-extrabold tracking-[-.07em] text-[#f8f7ff]" data-testid="text-selected-crowd">{chosen.id === activePlatformId ? scenario.currentCrowd : chosen.crowd}</div><div className="mt-1 text-xs text-[#8f88b5]">people present · {chosen.destination}</div></div><RiskBadge risk={(chosen.id === activePlatformId ? scenario.currentCrowd : chosen.crowd) / chosen.capacity * 100 >= 85 ? 'WARNING' : 'WATCH'} /></div><div className="mt-7"><div className="mb-2 flex justify-between text-[10px] text-[#8f88b5]"><span>Occupancy</span><span className="cf-mono text-[#c4b5fd]">{((chosen.id === activePlatformId ? scenario.currentCrowd : chosen.crowd) / chosen.capacity * 100).toFixed(1)}%</span></div><CrowdProgress value={(chosen.id === activePlatformId ? scenario.currentCrowd : chosen.crowd) / chosen.capacity * 100} /><div className="mt-3 flex justify-between text-[10px] text-[#8f88b5]"><span>Capacity</span><span className="cf-mono">{chosen.capacity} people</span></div></div><div className="mt-8 grid grid-cols-2 gap-2"><div className="rounded-xl bg-[#0b0928]/70 p-3"><div className="cf-label">Next arrival</div><div className="mt-2 text-sm font-extrabold text-[#f8f7ff]">{chosen.next}</div></div><div className="rounded-xl bg-[#0b0928]/70 p-3"><div className="cf-label">Last update</div><div className="mt-2 text-sm font-extrabold text-[#f8f7ff]">18 sec ago</div></div></div></div>
       <div className="cf-panel p-5 sm:p-6"><SectionTitle eyebrow="Selected platform / last 35 minutes" title="Snapshot trend" action={<span className="flex items-center gap-1 text-[10px] text-[#67e8a5]"><Radio size={12} /> receiving</span>} /><div className="h-[240px]"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend.map((crowd, index) => ({ time: `${index * 5}m`, crowd }))} margin={{ top: 8, right: 10, bottom: 0, left: -22 }}><CartesianGrid stroke="rgba(167,139,250,.1)" vertical={false} /><XAxis dataKey="time" tick={{ fill: '#8f88b5', fontSize: 10 }} tickLine={false} axisLine={false} /><YAxis tick={{ fill: '#8f88b5', fontSize: 10 }} tickLine={false} axisLine={false} width={40} /><Tooltip contentStyle={{ background: '#100c35', border: '1px solid rgba(167,139,250,.2)', borderRadius: 9, fontSize: 11 }} /><Line type="monotone" dataKey="crowd" stroke="#ec4899" strokeWidth={2.5} dot={{ fill: '#a78bfa', strokeWidth: 0, r: 2 }} /></LineChart></ResponsiveContainer></div><div className="mt-3 flex items-center gap-2 text-[10px] text-[#8f88b5]"><TrendingUp size={13} className="text-[#ec4899]" /> Crowd has risen 36% since 09:15</div></div>
     </div>
-    <div className="mt-4"><SectionTitle eyebrow="All monitored areas" title="Platform occupancy" /><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{platforms.map((platform, index) => { const crowd = index === 0 ? scenario.currentCrowd : platform.crowd; const occupancy = crowd / platform.capacity * 100; const risk: Risk = occupancy >= 100 ? 'CRITICAL' : occupancy >= 95 ? 'HIGH' : occupancy >= 85 ? 'WARNING' : occupancy >= 70 ? 'WATCH' : 'NORMAL'; return <button key={platform.id} className="cf-panel text-left p-4 transition-transform hover:-translate-y-0.5" onClick={() => setSelected(platform.id)} data-testid={`button-platform-${platform.id}`}><div className="flex items-start justify-between"><div><div className="text-sm font-extrabold text-[#f8f7ff]">{platform.name}</div><div className="mt-1 text-[10px] text-[#8f88b5]">{platform.destination}</div></div><RiskBadge risk={risk} /></div><div className="mt-5 flex items-end justify-between"><div className="cf-mono text-xl font-bold text-[#c4b5fd]">{crowd}<span className="text-xs font-normal text-[#8f88b5]"> / {platform.capacity}</span></div><span className="text-xs font-bold text-[#8f88b5]">{occupancy.toFixed(0)}%</span></div><div className="mt-3"><CrowdProgress value={occupancy} tone={risk === 'NORMAL' ? '#67e8a5' : risk === 'WATCH' ? '#f0bd69' : '#ec4899'} /></div></button>; })}</div></div>
+    <div className="mt-4"><SectionTitle eyebrow="All monitored areas" title="Platform occupancy" /><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{platforms.map((platform, index) => { const crowd = platform.id === activePlatformId ? scenario.currentCrowd : platform.crowd; const occupancy = crowd / platform.capacity * 100; const risk: Risk = occupancy >= 100 ? 'CRITICAL' : occupancy >= 95 ? 'HIGH' : occupancy >= 85 ? 'WARNING' : occupancy >= 70 ? 'WATCH' : 'NORMAL'; return <button key={platform.id} className="cf-panel text-left p-4 transition-transform hover:-translate-y-0.5" onClick={() => setSelected(platform.id)} data-testid={`button-platform-${platform.id}`}><div className="flex items-start justify-between"><div><div className="text-sm font-extrabold text-[#f8f7ff]">{platform.name}</div><div className="mt-1 text-[10px] text-[#8f88b5]">{platform.destination}</div></div><RiskBadge risk={risk} /></div><div className="mt-5 flex items-end justify-between"><div className="cf-mono text-xl font-bold text-[#c4b5fd]">{crowd}<span className="text-xs font-normal text-[#8f88b5]"> / {platform.capacity}</span></div><span className="text-xs font-bold text-[#8f88b5]">{occupancy.toFixed(0)}%</span></div><div className="mt-3"><CrowdProgress value={occupancy} tone={risk === 'NORMAL' ? '#67e8a5' : risk === 'WATCH' ? '#f0bd69' : '#ec4899'} /></div></button>; })}</div></div>
   </PageFrame>;
 }
 
@@ -569,7 +623,7 @@ function Settings() {
     <div className="mb-6"><div className="cf-label mb-2">Control room preferences</div><h1 className="m-0 text-2xl font-extrabold tracking-[-.05em] text-[#f8f7ff]">Settings</h1><p className="mt-2 text-sm text-[#8f88b5]">These preferences are local to this browser and shape the operator view.</p></div>
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_.8fr]">
       <div className="space-y-4"><div className="cf-panel p-5 sm:p-6"><SectionTitle eyebrow="Station defaults" title="Primary operating area" /><div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><label><span className="mb-1.5 block text-[10px] font-bold text-[#c4b5fd]">Default station</span><select className="cf-select" data-testid="select-default-station"><option>Central Terminal · CEN-01</option><option>Harbour Exchange · HBR-02</option><option>Northgate · NGT-04</option></select></label><label><span className="mb-1.5 block text-[10px] font-bold text-[#c4b5fd]">Default platform</span><select className="cf-select" data-testid="select-default-platform">{platforms.map((platform) => <option key={platform.id}>{platform.name}</option>)}</select></label></div></div><div className="cf-panel p-5 sm:p-6"><SectionTitle eyebrow="Risk engine" title="Capacity thresholds" action={<span className="text-[10px] text-[#8f88b5]">percent full</span>} /><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{([['watch', 'Watch'], ['warning', 'Warning'], ['high', 'High'], ['critical', 'Critical']] as Array<[keyof Thresholds, string]>).map(([key, label]) => <label key={key}><span className="mb-1.5 block text-[10px] font-bold text-[#c4b5fd]">{label}</span><input className="cf-input cf-mono" type="number" min="1" max="200" value={thresholds[key]} onChange={(event) => setThreshold(key, Number(event.target.value))} data-testid={`input-threshold-${key}`} /></label>)}</div><p className="mt-4 text-[10px] leading-relaxed text-[#8f88b5]">Risk labels are calculated locally. Keep the sequence ascending: watch → warning → high → critical.</p></div><div className="cf-panel p-5 sm:p-6"><SectionTitle eyebrow="Operator language" title="Announcement languages" /><div className="flex flex-wrap gap-2">{['English', 'Tamil', 'Hindi'].map((item, index) => <button key={item} className={`cf-btn ${index === 0 ? 'cf-btn-secondary' : 'cf-btn-quiet'} h-9`} data-testid={`button-language-${item.toLowerCase()}`}><Languages size={13} /> {item}{index === 0 && <Check size={12} />}</button>)}</div></div></div>
-      <div className="cf-panel border-[#ec4899]/25 p-5 sm:p-6"><form onSubmit={(event) => { event.preventDefault(); void save(); }}><div className="mb-5 flex items-start justify-between"><div><div className="cf-label mb-2 text-[#f472b6]">Optional AI assistance</div><h2 className="m-0 text-lg font-extrabold text-[#f8f7ff]">Gemini API key</h2></div><div className="rounded-xl bg-[#ec4899]/10 p-3 text-[#f472b6]"><KeyRound size={20} /></div></div><p className="text-xs leading-relaxed text-[#c4b5fd]">Paste any Gemini API key from Google AI Studio. CrowdFlow tests it against the free Gemini 2.5 Flash-Lite model before using it for announcement drafts.</p><label className="mt-6 block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[.12em] text-[#8f88b5]">API key</span><input className="cf-input cf-mono" type="password" autoComplete="new-password" value={apiKey} placeholder="AIza…" onChange={(event) => setApiKey(event.target.value)} data-testid="input-gemini-api-key" /></label><label className="mt-4 block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[.12em] text-[#8f88b5]">Free model</span><select className="cf-select" value={model} onChange={(event) => setModel(event.target.value)} data-testid="select-gemini-model"><option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite · free tier</option><option value="gemini-2.5-flash">Gemini 2.5 Flash · free tier</option></select></label><button type="submit" disabled={geminiStatus === 'testing'} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-save-gemini"><Save size={14} /> {geminiStatus === 'testing' ? 'Testing key…' : saved ? 'Saved and connected' : 'Save & test Gemini key'}</button><div className="mt-4 flex items-start gap-2 rounded-xl border px-3 py-3 text-[10px] leading-relaxed" style={{ borderColor: `${statusTone}35`, background: `${statusTone}0d`, color: statusTone }} data-testid="status-gemini-connection"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: statusTone }} /><span>{geminiMessage}</span></div><div className="mt-5 flex gap-2 rounded-xl border border-[#a78bfa]/10 bg-[#0b0928]/50 p-3 text-[10px] leading-relaxed text-[#8f88b5]"><ShieldAlert size={14} className="mt-0.5 shrink-0 text-[#c4b5fd]" /><span>Gemini drafts are suggestions only. CrowdFlow keeps numerical forecast and risk decisions independent from model text.</span></div></form></div>
+      <div className="cf-panel border-[#ec4899]/25 p-5 sm:p-6"><form onSubmit={(event) => { event.preventDefault(); void save(); }}><div className="mb-5 flex items-start justify-between"><div><div className="cf-label mb-2 text-[#f472b6]">Optional AI assistance</div><h2 className="m-0 text-lg font-extrabold text-[#f8f7ff]">Gemini API key</h2></div><div className="rounded-xl bg-[#ec4899]/10 p-3 text-[#f472b6]"><KeyRound size={20} /></div></div><p className="text-xs leading-relaxed text-[#c4b5fd]">Paste any Gemini API key from Google AI Studio. CrowdFlow tests it against the free Gemini 2.5 Flash-Lite model before using it for announcement drafts and calculations.</p><label className="mt-6 block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[.12em] text-[#8f88b5]">API key</span><input className="cf-input cf-mono" type="password" autoComplete="new-password" value={apiKey} placeholder="AIza…" onChange={(event) => setApiKey(event.target.value)} data-testid="input-gemini-api-key" /></label><label className="mt-4 block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[.12em] text-[#8f88b5]">Model</span><select className="cf-select" value={model} onChange={(event) => setModel(event.target.value)} data-testid="select-gemini-model"><option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option><option value="gemini-2.5-flash">Gemini 2.5 Flash</option></select></label><button type="submit" disabled={geminiStatus === 'testing'} className="cf-btn cf-btn-primary mt-5 w-full" data-testid="button-save-gemini"><Save size={14} /> {geminiStatus === 'testing' ? 'Testing key…' : saved ? 'Saved and connected' : 'Save & test Gemini key'}</button><div className="mt-4 flex items-start gap-2 rounded-xl border px-3 py-3 text-[10px] leading-relaxed" style={{ borderColor: `${statusTone}35`, background: `${statusTone}0d`, color: statusTone }} data-testid="status-gemini-connection"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: statusTone }} /><span>{geminiMessage}</span></div><div className="mt-5 flex gap-2 rounded-xl border border-[#a78bfa]/10 bg-[#0b0928]/50 p-3 text-[10px] leading-relaxed text-[#8f88b5]"><ShieldAlert size={14} className="mt-0.5 shrink-0 text-[#c4b5fd]" /><span>Gemini calculates the predicted values and risks.</span></div></form></div>
     </div>
   </PageFrame>;
 }

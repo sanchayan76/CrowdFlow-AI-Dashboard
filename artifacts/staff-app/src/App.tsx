@@ -92,6 +92,13 @@ type ActivityEntry = {
   time: number;
 };
 
+type Announcement = {
+  language: string;
+  text: string;
+  timestamp: string;
+  source: string;
+};
+
 // ────────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ────────────────────────────────────────────────────────────────────────────────
@@ -116,6 +123,7 @@ type AppState = {
   alerts: Alert[];
   platforms: Platform[];
   activity: ActivityEntry[];
+  announcements: Announcement[];
   connection: ConnectionState;
   lastSync: number;
 };
@@ -124,6 +132,7 @@ type AppAction =
   | { type: 'SET_SCENARIO'; scenario: ScenarioInput }
   | { type: 'SET_ALERTS'; alerts: Alert[] }
   | { type: 'SET_PLATFORMS'; platforms: Platform[] }
+  | { type: 'SET_ANNOUNCEMENTS'; announcements: Announcement[] }
   | { type: 'UPDATE_ALERT'; id: string; changes: Partial<Alert>; entry?: TimelineEntry; activityAction?: string }
   | { type: 'SET_CONNECTION'; state: ConnectionState }
   | { type: 'SYNC' };
@@ -136,6 +145,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, alerts: action.alerts, lastSync: Date.now() };
     case 'SET_PLATFORMS':
       return { ...state, platforms: action.platforms };
+    case 'SET_ANNOUNCEMENTS':
+      return { ...state, announcements: action.announcements, lastSync: Date.now() };
     case 'UPDATE_ALERT': {
       const now = Date.now();
       const alerts = state.alerts.map((a) =>
@@ -194,6 +205,7 @@ function StaffProvider({ children }: { children: ReactNode }) {
     alerts: [],
     platforms: [],
     activity: [],
+    announcements: [],
     connection: 'reconnecting',
     lastSync: Date.now(),
   });
@@ -205,6 +217,7 @@ function StaffProvider({ children }: { children: ReactNode }) {
         if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
         if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
         if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
+        if (data.announcements) dispatch({ type: 'SET_ANNOUNCEMENTS', announcements: data.announcements });
         dispatch({ type: 'SET_CONNECTION', state: 'connected' });
       })
       .catch(() => dispatch({ type: 'SET_CONNECTION', state: 'offline' }));
@@ -215,6 +228,7 @@ function StaffProvider({ children }: { children: ReactNode }) {
       if (data.scenario) dispatch({ type: 'SET_SCENARIO', scenario: data.scenario });
       if (data.alerts) dispatch({ type: 'SET_ALERTS', alerts: data.alerts });
       if (data.platforms) dispatch({ type: 'SET_PLATFORMS', platforms: data.platforms });
+      if (data.announcements) dispatch({ type: 'SET_ANNOUNCEMENTS', announcements: data.announcements });
       dispatch({ type: 'SET_CONNECTION', state: 'connected' });
       dispatch({ type: 'SYNC' });
     };
@@ -823,23 +837,82 @@ function ActivityTab() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
+// ANNOUNCEMENTS TAB
+// ────────────────────────────────────────────────────────────────────────────────
+
+function AnnouncementsTab() {
+  const { state } = useStaff();
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const copy = async (text: string, index: number) => {
+    await navigator.clipboard?.writeText(text);
+    setCopied(index);
+    window.setTimeout(() => setCopied(null), 1600);
+  };
+
+  const read = (text: string) => {
+    window.speechSynthesis?.cancel();
+    window.speechSynthesis?.speak(new SpeechSynthesisUtterance(text));
+  };
+
+  return (
+    <div className="staff-content">
+      <div className="staff-section-title">PA Announcements</div>
+      <div style={{ fontSize: 11, color: 'var(--staff-text-muted)', marginBottom: 16 }}>
+        Announcements generated from the operations dashboard appear here in real time. Review before broadcasting.
+      </div>
+      {state.announcements.length === 0 ? (
+        <div className="empty-state">
+          <Bell size={36} />
+          <p>No announcements yet. Generate one from the CrowdFlow Dashboard.</p>
+        </div>
+      ) : (
+        state.announcements.map((ann, index) => (
+          <div key={`${ann.timestamp}-${index}`} className="alert-card" style={{ borderLeftColor: 'var(--staff-brand-light)', borderLeftWidth: 3, borderLeftStyle: 'solid' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Bell size={14} color="var(--staff-brand-light)" />
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--staff-text)' }}>{ann.language}</span>
+                <span style={{ fontSize: 10, color: 'var(--staff-text-muted)', background: 'var(--staff-bg)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>{ann.source}</span>
+              </div>
+              <span style={{ fontSize: 10, color: 'var(--staff-text-muted)' }}>{ann.timestamp}</span>
+            </div>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--staff-text)', margin: '0 0 12px 0' }}>{ann.text}</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="staff-action-btn secondary small" onClick={() => copy(ann.text, index)}>
+                {copied === index ? <><CheckCircle2 size={13} /> Copied</> : <><ClipboardList size={13} /> Copy</>}
+              </button>
+              <button className="staff-action-btn secondary small" onClick={() => read(ann.text)}>
+                <Radio size={13} /> Read aloud
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
 // BOTTOM NAVIGATION (3 tabs: Alerts, Live Crowd, Activity)
 // ────────────────────────────────────────────────────────────────────────────────
 
-type Tab = 'alerts' | 'crowd' | 'activity';
+type Tab = 'alerts' | 'crowd' | 'announcements' | 'activity';
 
 function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   const { state } = useStaff();
   const criticalCount = state.alerts.filter((a) => a.severity === 'CRITICAL' && a.status !== 'RESOLVED').length;
+  const annCount = state.announcements.length;
 
   const items: Array<{ key: Tab; label: string; icon: ReactNode; badge?: number }> = [
     { key: 'alerts', label: 'Alerts', icon: <AlertTriangle size={20} />, badge: criticalCount > 0 ? criticalCount : undefined },
     { key: 'crowd', label: 'Live Crowd', icon: <Users size={20} /> },
+    { key: 'announcements', label: 'PA', icon: <Bell size={20} />, badge: annCount > 0 ? annCount : undefined },
     { key: 'activity', label: 'Activity', icon: <History size={20} /> },
   ];
 
   return (
-    <nav className="staff-bottom-nav" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+    <nav className="staff-bottom-nav" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
       {items.map(({ key, label, icon, badge }) => (
         <button key={key} className={`staff-nav-item ${tab === key ? 'active' : ''}`} onClick={() => onTab(key)}>
           {icon}
@@ -863,6 +936,7 @@ function AuthenticatedApp() {
       <AppHeader />
       {tab === 'alerts' && <AlertsTab />}
       {tab === 'crowd' && <LiveCrowdTab />}
+      {tab === 'announcements' && <AnnouncementsTab />}
       {tab === 'activity' && <ActivityTab />}
       <BottomNav tab={tab} onTab={setTab} />
     </div>

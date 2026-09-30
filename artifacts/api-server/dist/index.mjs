@@ -20720,27 +20720,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router4;
+    module.exports = Router5;
     module.exports.Route = Route;
-    function Router4(options) {
-      if (!(this instanceof Router4)) {
-        return new Router4(options);
+    function Router5(options) {
+      if (!(this instanceof Router5)) {
+        return new Router5(options);
       }
       const opts = options || {};
-      function router4(req, res, next) {
-        router4.handle(req, res, next);
+      function router5(req, res, next) {
+        router5.handle(req, res, next);
       }
-      Object.setPrototypeOf(router4, this);
-      router4.caseSensitive = opts.caseSensitive;
-      router4.mergeParams = opts.mergeParams;
-      router4.params = {};
-      router4.strict = opts.strict;
-      router4.stack = [];
-      return router4;
+      Object.setPrototypeOf(router5, this);
+      router5.caseSensitive = opts.caseSensitive;
+      router5.mergeParams = opts.mergeParams;
+      router5.params = {};
+      router5.strict = opts.strict;
+      router5.stack = [];
+      return router5;
     }
-    Router4.prototype = function() {
+    Router5.prototype = function() {
     };
-    Router4.prototype.param = function param(name, fn) {
+    Router5.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -20760,7 +20760,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router4.prototype.handle = function handle(req, res, callback) {
+    Router5.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -20887,7 +20887,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router4.prototype.use = function use(handler) {
+    Router5.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -20920,7 +20920,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router4.prototype.route = function route(path) {
+    Router5.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -20935,7 +20935,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router4.prototype[method] = function(path) {
+      Router5.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21118,13 +21118,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router4 = require_router();
+    var Router5 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router4 = null;
+      var router5 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21133,13 +21133,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router4 === null) {
-            router4 = new Router4({
+          if (router5 === null) {
+            router5 = new Router5({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router4;
+          return router5;
         }
       });
     };
@@ -21210,15 +21210,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router4 = this.router;
+      var router5 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router4.use(path, fn2);
+          return router5.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router4.use(path, function mounted_app(req, res, next) {
+        router5.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -23727,7 +23727,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router4 = require_router();
+    var Router5 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -23749,8 +23749,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router4.Route;
-    exports.Router = Router4;
+    exports.Route = Router5.Route;
+    exports.Router = Router5;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28146,7 +28146,7 @@ var require_pino = __commonJS({
     function pinoBundlerAbsolutePath(p) {
       try {
         const path = __require("path");
-        const outputDir = "/vercel/share/v0-project/artifacts/api-server/dist";
+        const outputDir = "/home/ayan/Projects/CrowdFlow-AI-Dashboard/artifacts/api-server/dist";
         return path.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
@@ -28609,12 +28609,12 @@ var require_logger = __commonJS({
 });
 
 // src/app.ts
-var import_express4 = __toESM(require_express2(), 1);
+var import_express5 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 
 // src/routes/index.ts
-var import_express3 = __toESM(require_express2(), 1);
+var import_express4 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -32512,21 +32512,141 @@ var health_default = router;
 var import_express2 = __toESM(require_express2(), 1);
 
 // src/store.ts
+var now = Date.now();
 var state = {
   scenario: {
-    currentCrowd: 0,
-    platformCapacity: 0,
-    vehicleCapacity: 0,
-    nextVehicleArrival: 0,
-    recentCrowdGrowth: 0,
-    followingBusArrival: 0
+    currentCrowd: 438,
+    platformCapacity: 600,
+    vehicleCapacity: 600,
+    nextVehicleArrival: 7,
+    recentCrowdGrowth: 18,
+    followingBusArrival: 14
   },
-  platforms: [],
-  alerts: []
+  platforms: [
+    { id: "p1", name: "Platform 01", crowd: 438, capacity: 600, destination: "Northbound local", next: "2 min" },
+    { id: "p2", name: "Platform 02", crowd: 512, capacity: 600, destination: "Airport express", next: "8 min" },
+    { id: "p3", name: "Platform 03", crowd: 276, capacity: 500, destination: "Harbour line", next: "5 min" },
+    { id: "p4", name: "Platform 04", crowd: 184, capacity: 450, destination: "Riverside local", next: "11 min" }
+  ],
+  alerts: [
+    {
+      id: "INC-2401",
+      severity: "CRITICAL",
+      location: "GATE 03",
+      zone: "North Concourse",
+      title: "Crowd Density Exceeded",
+      description: "Crowd is building near the entrance. Entry flow rate has tripled in the last 5 minutes. Gate capacity approaching unsafe levels.",
+      density: 92,
+      threshold: 80,
+      status: "NEW",
+      assignedTo: null,
+      assignedName: null,
+      createdAt: now - 12e3,
+      updatedAt: now - 12e3,
+      instructions: "Redirect incoming foot traffic to Gate 04. Brief security team at north post. Prepare to hold concourse entry if density exceeds 95%.",
+      timeline: [{ action: "Alert generated \u2014 density 92% exceeded threshold 80%", actor: "System", time: now - 12e3, type: "critical" }]
+    },
+    {
+      id: "INC-2400",
+      severity: "HIGH",
+      location: "FOOD COURT \u2014 ZONE B",
+      zone: "East Wing",
+      title: "Unusual Crowd Buildup",
+      description: "Monitor entry flow and clear the exit. Crowd density rising steadily with no events scheduled in this zone.",
+      density: 78,
+      threshold: 75,
+      status: "ACKNOWLEDGED",
+      assignedTo: "staff-01",
+      assignedName: "Arjun Mehta",
+      createdAt: now - 18e4,
+      updatedAt: now - 6e4,
+      instructions: "Check if any informal gathering or promotion is causing the buildup. Clear exit paths and monitor for 10 minutes.",
+      timeline: [
+        { action: "Alert generated \u2014 density 78% exceeded threshold 75%", actor: "System", time: now - 18e4, type: "critical" },
+        { action: "Acknowledged by Arjun Mehta", actor: "Arjun Mehta", time: now - 6e4, type: "info" }
+      ]
+    },
+    {
+      id: "INC-2399",
+      severity: "MEDIUM",
+      location: "PLATFORM 02",
+      zone: "South Terminal",
+      title: "Elevated Occupancy",
+      description: "Platform approaching watch-level density. Next train arrives in 8 minutes. Monitoring crowd accumulation rate.",
+      density: 71,
+      threshold: 70,
+      status: "RESPONDING",
+      assignedTo: "staff-02",
+      assignedName: "Priya Nair",
+      createdAt: now - 42e4,
+      updatedAt: now - 9e4,
+      instructions: "Monitor boarding queue. If density rises above 80%, activate platform overflow protocol.",
+      timeline: [
+        { action: "Alert generated \u2014 density 71% exceeded threshold 70%", actor: "System", time: now - 42e4, type: "info" },
+        { action: "Acknowledged by Priya Nair", actor: "Priya Nair", time: now - 3e5, type: "info" },
+        { action: "Priya Nair is responding", actor: "Priya Nair", time: now - 9e4, type: "info" }
+      ]
+    },
+    {
+      id: "INC-2398",
+      severity: "HIGH",
+      location: "MAIN ENTRANCE",
+      zone: "Central Lobby",
+      title: "Ingress Bottleneck Detected",
+      description: "Security checkpoint causing significant queuing. Estimated wait exceeds 12 minutes during peak entry period.",
+      density: 85,
+      threshold: 80,
+      status: "NEW",
+      assignedTo: null,
+      assignedName: null,
+      createdAt: now - 45e3,
+      updatedAt: now - 45e3,
+      instructions: "Open auxiliary screening lanes. Deploy additional staff to manage queue. Consider opening Gate 02 for overflow.",
+      timeline: [{ action: "Alert generated \u2014 ingress bottleneck detected", actor: "System", time: now - 45e3, type: "critical" }]
+    },
+    {
+      id: "INC-2397",
+      severity: "LOW",
+      location: "PARKING \u2014 LEVEL 2",
+      zone: "West Structure",
+      title: "Moderate Foot Traffic",
+      description: "Elevated pedestrian movement between parking and venue. No immediate concern but tracking trend.",
+      density: 45,
+      threshold: 60,
+      status: "ACKNOWLEDGED",
+      assignedTo: "staff-01",
+      assignedName: "Arjun Mehta",
+      createdAt: now - 6e5,
+      updatedAt: now - 3e5,
+      instructions: null,
+      timeline: [
+        { action: "Alert generated \u2014 moderate foot traffic", actor: "System", time: now - 6e5, type: "info" },
+        { action: "Acknowledged by Arjun Mehta", actor: "Arjun Mehta", time: now - 3e5, type: "info" }
+      ]
+    },
+    {
+      id: "INC-2396",
+      severity: "CRITICAL",
+      location: "EMERGENCY EXIT C",
+      zone: "South Terminal",
+      title: "Exit Route Obstructed",
+      description: "Emergency exit C partially blocked by vendor equipment. Immediate clearance required for safety compliance.",
+      density: 0,
+      threshold: 0,
+      status: "NEW",
+      assignedTo: null,
+      assignedName: null,
+      createdAt: now - 3e4,
+      updatedAt: now - 3e4,
+      instructions: "Remove obstruction immediately. Verify exit path is fully clear. Report compliance status to supervisor.",
+      timeline: [{ action: "Alert generated \u2014 exit route obstruction reported", actor: "System", time: now - 3e4, type: "critical" }]
+    }
+  ]
 };
+var announcements = [];
 var clients = /* @__PURE__ */ new Set();
 function getState() {
-  return state;
+  return { ...state, announcements };
 }
 function updateScenario(updates) {
   state.scenario = { ...state.scenario, ...updates };
@@ -32550,8 +32670,13 @@ function subscribe(callback) {
   clients.add(callback);
   return () => clients.delete(callback);
 }
+function addAnnouncement(announcement) {
+  announcements = [announcement, ...announcements].slice(0, 50);
+  notifyClients();
+}
 function notifyClients() {
-  clients.forEach((client) => client(state));
+  const fullState = { ...state, announcements };
+  clients.forEach((client) => client(fullState));
 }
 
 // src/routes/api.ts
@@ -32570,9 +32695,10 @@ router2.post("/alert/:id", (req, res) => {
   res.json({ success: true });
 });
 router2.get("/stream", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
   const sendState = (state2) => {
     res.write(`data: ${JSON.stringify(state2)}
@@ -32591,11 +32717,105 @@ router2.get("/stream", (req, res) => {
 });
 var api_default = router2;
 
-// src/routes/index.ts
+// src/routes/simulation.ts
+var import_express3 = __toESM(require_express2(), 1);
+import { GoogleGenAI, Type } from "@google/genai";
 var router3 = (0, import_express3.Router)();
-router3.use(health_default);
-router3.use("/v1", api_default);
-var routes_default = router3;
+router3.post("/simulate", async (req, res) => {
+  const { scenario, language, apiKey, model } = req.body;
+  const lang = language || "English";
+  const keyToUse = apiKey || process.env.GEMINI_API_KEY;
+  const modelToUse = model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (!keyToUse) {
+    return res.status(400).json({ error: "No API key provided" });
+  }
+  const ai = new GoogleGenAI({ apiKey: keyToUse });
+  const prompt = `
+You are a Station & Platform Crowd Agent simulation.
+Calculate the crowd forecast based on the following input data and recommend exactly ONE operational move.
+
+Input Data:
+- Current Crowd: ${scenario.currentCrowd} people
+- Platform Capacity: ${scenario.platformCapacity} people
+- Recent Crowd Growth: ${scenario.recentCrowdGrowth} people per minute
+- Next vehicle arrives in: ${scenario.nextVehicleArrival} minutes
+- Following bus arrives in: ${scenario.followingBusArrival} minutes
+- Vehicle Capacity: ${scenario.vehicleCapacity} people
+
+Tasks:
+1. Calculate the predicted crowd when the following bus arrives. (Current Crowd + Growth * Following Bus Arrival - Vehicle Capacity * Number of vehicles).
+2. Calculate the occupancy percentage at that time (predicted crowd / platform capacity * 100).
+3. Determine the risk level ("NORMAL", "WATCH", "WARNING", "HIGH", "CRITICAL"). Normal < 70%, Watch >= 70%, Warning >= 85%, High >= 95%, Critical >= 100%.
+4. Provide a short risk explanation.
+5. Provide a short summary of the situation.
+6. Recommend exactly ONE operational move (e.g., "OPEN_BAY_2", "HOLD_CONCOURSE", "REDIRECT_PASSENGERS").
+7. Give a short reason for the recommended move.
+8. Provide a PA announcement in ${lang} suitable for public broadcast. Ensure it is safe and non-threatening.
+`;
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      predictedCrowd: { type: Type.INTEGER },
+      occupancy: { type: Type.NUMBER },
+      riskLevel: { type: Type.STRING },
+      riskExplanation: { type: Type.STRING },
+      summary: { type: Type.STRING },
+      recommendedMove: { type: Type.STRING },
+      reason: { type: Type.STRING },
+      paAnnouncement: { type: Type.STRING }
+    },
+    required: ["predictedCrowd", "occupancy", "riskLevel", "riskExplanation", "summary", "recommendedMove", "reason", "paAnnouncement"]
+  };
+  try {
+    const response = await ai.models.generateContent({
+      model: modelToUse,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema
+      }
+    });
+    if (response.text) {
+      const parsed = JSON.parse(response.text);
+      if (parsed.paAnnouncement) {
+        addAnnouncement({
+          language: lang,
+          text: parsed.paAnnouncement,
+          timestamp: (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          source: "Gemini"
+        });
+      }
+      return res.json({
+        forecast: {
+          predictedCrowd: parsed.predictedCrowd,
+          occupancy: parsed.occupancy,
+          risk: parsed.riskLevel,
+          riskExplanation: parsed.riskExplanation
+        },
+        aiAnalysis: {
+          riskLevel: parsed.riskLevel,
+          summary: parsed.summary,
+          recommendedMove: parsed.recommendedMove,
+          reason: parsed.reason,
+          paAnnouncement: parsed.paAnnouncement
+        }
+      });
+    } else {
+      throw new Error("Empty response from Gemini");
+    }
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+var simulation_default = router3;
+
+// src/routes/index.ts
+var router4 = (0, import_express4.Router)();
+router4.use(health_default);
+router4.use("/v1", api_default);
+router4.use("/v1", simulation_default);
+var routes_default = router4;
 
 // src/lib/logger.ts
 var import_pino = __toESM(require_pino(), 1);
@@ -32616,7 +32836,7 @@ var logger = (0, import_pino.default)({
 });
 
 // src/app.ts
-var app = (0, import_express4.default)();
+var app = (0, import_express5.default)();
 app.use(
   (0, import_pino_http.default)({
     logger,
@@ -32636,18 +32856,28 @@ app.use(
     }
   })
 );
-var allowedOrigins = [
-  "https://crowd-flow-ai-dashboard-blush.vercel.app",
-  "https://crowdflow-ai-dashboard.vercel.app",
-  process.env.FRONTEND_URL
-].filter((origin) => Boolean(origin));
+var allowedOrigins = new Set(
+  [
+    "https://crowd-flow-ai-dashboard-blush.vercel.app",
+    "https://crowdflow-ai-dashboard.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    process.env.FRONTEND_URL
+  ].filter((origin) => Boolean(origin)).map((origin) => origin.replace(/\/$/, ""))
+);
 app.use(
   (0, import_cors.default)({
-    origin: allowedOrigins
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed by CORS"));
+    }
   })
 );
-app.use(import_express4.default.json());
-app.use(import_express4.default.urlencoded({ extended: true }));
+app.use(import_express5.default.json());
+app.use(import_express5.default.urlencoded({ extended: true }));
 app.use("/api", routes_default);
 var app_default = app;
 

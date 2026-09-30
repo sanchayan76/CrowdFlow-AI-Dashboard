@@ -29,6 +29,8 @@ const allowedOrigins = new Set(
   [
     "https://crowd-flow-ai-dashboard-blush.vercel.app",
     "https://crowdflow-ai-dashboard.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
     process.env.FRONTEND_URL,
   ]
     .filter((origin): origin is string => Boolean(origin))

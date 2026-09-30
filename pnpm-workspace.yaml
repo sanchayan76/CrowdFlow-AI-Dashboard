@@ -162,4 +162,6 @@ overrides:
   js-yaml: '4.3.2'
 
 allowBuilds:
+  '@google/genai': true
   esbuild: true
+  protobufjs: true
