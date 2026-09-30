@@ -263,7 +263,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`${baseUrl}/api/v1/scenario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nextScenario),
+        body: JSON.stringify({ scenario: nextScenario, platformId: activePlatformId }),
       });
       if (!response.ok) throw new Error(`Forecast update failed with ${response.status}`);
       
@@ -273,7 +273,7 @@ function CrowdFlowProvider({ children }: { children: ReactNode }) {
       const simulateRes = await fetch(`${baseUrl}/api/v1/simulate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario: nextScenario, language: 'English', apiKey, model }),
+        body: JSON.stringify({ scenario: nextScenario, language: 'English', apiKey, model, platformId: activePlatformId }),
       });
       
       if (simulateRes.ok) {

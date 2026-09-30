@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { addAnnouncement } from "../store";
+import { addAnnouncement, addAlert, getState } from "../store";
 
 const router = Router();
 
@@ -75,6 +75,35 @@ Tasks:
           text: parsed.paAnnouncement,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           source: 'Gemini',
+        });
+      }
+      
+      // Generate an alert if the risk is elevated
+      if (['WARNING', 'HIGH', 'CRITICAL'].includes(parsed.riskLevel)) {
+        const now = Date.now();
+        const severityMap: any = { 'WARNING': 'MEDIUM', 'HIGH': 'HIGH', 'CRITICAL': 'CRITICAL' };
+        
+        const platformId = req.body.platformId;
+        const state = getState();
+        const platform = state.platforms.find((p: any) => p.id === platformId);
+        const locationName = platform ? platform.name : (platformId || 'Unknown Platform');
+        
+        addAlert({
+          id: `INC-${Math.floor(Math.random() * 10000)}`,
+          severity: severityMap[parsed.riskLevel],
+          location: locationName,
+          zone: 'Platform',
+          title: parsed.summary || 'Elevated Crowd Risk',
+          description: parsed.riskExplanation || 'Crowd density is rising',
+          density: parsed.occupancy,
+          threshold: parsed.riskLevel === 'CRITICAL' ? 100 : parsed.riskLevel === 'HIGH' ? 95 : 85,
+          status: 'NEW',
+          assignedTo: null,
+          assignedName: null,
+          createdAt: now,
+          updatedAt: now,
+          instructions: parsed.recommendedMove + ': ' + parsed.reason,
+          timeline: [{ action: `AI Detected ${parsed.riskLevel} condition`, actor: 'AI System', time: now, type: 'critical' }]
         });
       }
       

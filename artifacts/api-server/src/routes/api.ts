@@ -8,7 +8,10 @@ router.get("/state", (req, res) => {
 });
 
 router.post("/scenario", (req, res) => {
-  updateScenario(req.body);
+  const { scenario, platformId } = req.body;
+  if (scenario) {
+    updateScenario(scenario, platformId);
+  }
   res.json({ success: true });
 });
 

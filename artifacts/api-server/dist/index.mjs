@@ -32528,128 +32528,27 @@ var state = {
     { id: "p3", name: "Platform 03", crowd: 276, capacity: 500, destination: "Harbour line", next: "5 min" },
     { id: "p4", name: "Platform 04", crowd: 184, capacity: 450, destination: "Riverside local", next: "11 min" }
   ],
-  alerts: [
-    {
-      id: "INC-2401",
-      severity: "CRITICAL",
-      location: "GATE 03",
-      zone: "North Concourse",
-      title: "Crowd Density Exceeded",
-      description: "Crowd is building near the entrance. Entry flow rate has tripled in the last 5 minutes. Gate capacity approaching unsafe levels.",
-      density: 92,
-      threshold: 80,
-      status: "NEW",
-      assignedTo: null,
-      assignedName: null,
-      createdAt: now - 12e3,
-      updatedAt: now - 12e3,
-      instructions: "Redirect incoming foot traffic to Gate 04. Brief security team at north post. Prepare to hold concourse entry if density exceeds 95%.",
-      timeline: [{ action: "Alert generated \u2014 density 92% exceeded threshold 80%", actor: "System", time: now - 12e3, type: "critical" }]
-    },
-    {
-      id: "INC-2400",
-      severity: "HIGH",
-      location: "FOOD COURT \u2014 ZONE B",
-      zone: "East Wing",
-      title: "Unusual Crowd Buildup",
-      description: "Monitor entry flow and clear the exit. Crowd density rising steadily with no events scheduled in this zone.",
-      density: 78,
-      threshold: 75,
-      status: "ACKNOWLEDGED",
-      assignedTo: "staff-01",
-      assignedName: "Arjun Mehta",
-      createdAt: now - 18e4,
-      updatedAt: now - 6e4,
-      instructions: "Check if any informal gathering or promotion is causing the buildup. Clear exit paths and monitor for 10 minutes.",
-      timeline: [
-        { action: "Alert generated \u2014 density 78% exceeded threshold 75%", actor: "System", time: now - 18e4, type: "critical" },
-        { action: "Acknowledged by Arjun Mehta", actor: "Arjun Mehta", time: now - 6e4, type: "info" }
-      ]
-    },
-    {
-      id: "INC-2399",
-      severity: "MEDIUM",
-      location: "PLATFORM 02",
-      zone: "South Terminal",
-      title: "Elevated Occupancy",
-      description: "Platform approaching watch-level density. Next train arrives in 8 minutes. Monitoring crowd accumulation rate.",
-      density: 71,
-      threshold: 70,
-      status: "RESPONDING",
-      assignedTo: "staff-02",
-      assignedName: "Priya Nair",
-      createdAt: now - 42e4,
-      updatedAt: now - 9e4,
-      instructions: "Monitor boarding queue. If density rises above 80%, activate platform overflow protocol.",
-      timeline: [
-        { action: "Alert generated \u2014 density 71% exceeded threshold 70%", actor: "System", time: now - 42e4, type: "info" },
-        { action: "Acknowledged by Priya Nair", actor: "Priya Nair", time: now - 3e5, type: "info" },
-        { action: "Priya Nair is responding", actor: "Priya Nair", time: now - 9e4, type: "info" }
-      ]
-    },
-    {
-      id: "INC-2398",
-      severity: "HIGH",
-      location: "MAIN ENTRANCE",
-      zone: "Central Lobby",
-      title: "Ingress Bottleneck Detected",
-      description: "Security checkpoint causing significant queuing. Estimated wait exceeds 12 minutes during peak entry period.",
-      density: 85,
-      threshold: 80,
-      status: "NEW",
-      assignedTo: null,
-      assignedName: null,
-      createdAt: now - 45e3,
-      updatedAt: now - 45e3,
-      instructions: "Open auxiliary screening lanes. Deploy additional staff to manage queue. Consider opening Gate 02 for overflow.",
-      timeline: [{ action: "Alert generated \u2014 ingress bottleneck detected", actor: "System", time: now - 45e3, type: "critical" }]
-    },
-    {
-      id: "INC-2397",
-      severity: "LOW",
-      location: "PARKING \u2014 LEVEL 2",
-      zone: "West Structure",
-      title: "Moderate Foot Traffic",
-      description: "Elevated pedestrian movement between parking and venue. No immediate concern but tracking trend.",
-      density: 45,
-      threshold: 60,
-      status: "ACKNOWLEDGED",
-      assignedTo: "staff-01",
-      assignedName: "Arjun Mehta",
-      createdAt: now - 6e5,
-      updatedAt: now - 3e5,
-      instructions: null,
-      timeline: [
-        { action: "Alert generated \u2014 moderate foot traffic", actor: "System", time: now - 6e5, type: "info" },
-        { action: "Acknowledged by Arjun Mehta", actor: "Arjun Mehta", time: now - 3e5, type: "info" }
-      ]
-    },
-    {
-      id: "INC-2396",
-      severity: "CRITICAL",
-      location: "EMERGENCY EXIT C",
-      zone: "South Terminal",
-      title: "Exit Route Obstructed",
-      description: "Emergency exit C partially blocked by vendor equipment. Immediate clearance required for safety compliance.",
-      density: 0,
-      threshold: 0,
-      status: "NEW",
-      assignedTo: null,
-      assignedName: null,
-      createdAt: now - 3e4,
-      updatedAt: now - 3e4,
-      instructions: "Remove obstruction immediately. Verify exit path is fully clear. Report compliance status to supervisor.",
-      timeline: [{ action: "Alert generated \u2014 exit route obstruction reported", actor: "System", time: now - 3e4, type: "critical" }]
-    }
-  ]
+  alerts: []
 };
 var announcements = [];
 var clients = /* @__PURE__ */ new Set();
 function getState() {
   return { ...state, announcements };
 }
-function updateScenario(updates) {
+function updateScenario(updates, platformId) {
   state.scenario = { ...state.scenario, ...updates };
+  if (platformId) {
+    state.platforms = state.platforms.map((p) => {
+      if (p.id === platformId) {
+        return {
+          ...p,
+          crowd: updates.currentCrowd ?? p.crowd,
+          capacity: updates.platformCapacity ?? p.capacity
+        };
+      }
+      return p;
+    });
+  }
   notifyClients();
 }
 function updateAlert(id, updates, timelineEntry) {
@@ -32664,6 +32563,10 @@ function updateAlert(id, updates, timelineEntry) {
     }
     return a;
   });
+  notifyClients();
+}
+function addAlert(alert) {
+  state.alerts = [alert, ...state.alerts];
   notifyClients();
 }
 function subscribe(callback) {
@@ -32685,7 +32588,10 @@ router2.get("/state", (req, res) => {
   res.json(getState());
 });
 router2.post("/scenario", (req, res) => {
-  updateScenario(req.body);
+  const { scenario, platformId } = req.body;
+  if (scenario) {
+    updateScenario(scenario, platformId);
+  }
   res.json({ success: true });
 });
 router2.post("/alert/:id", (req, res) => {
@@ -32783,6 +32689,31 @@ Tasks:
           text: parsed.paAnnouncement,
           timestamp: (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           source: "Gemini"
+        });
+      }
+      if (["WARNING", "HIGH", "CRITICAL"].includes(parsed.riskLevel)) {
+        const now2 = Date.now();
+        const severityMap = { "WARNING": "MEDIUM", "HIGH": "HIGH", "CRITICAL": "CRITICAL" };
+        const platformId = req.body.platformId;
+        const state2 = getState();
+        const platform = state2.platforms.find((p) => p.id === platformId);
+        const locationName = platform ? platform.name : platformId || "Unknown Platform";
+        addAlert({
+          id: `INC-${Math.floor(Math.random() * 1e4)}`,
+          severity: severityMap[parsed.riskLevel],
+          location: locationName,
+          zone: "Platform",
+          title: parsed.summary || "Elevated Crowd Risk",
+          description: parsed.riskExplanation || "Crowd density is rising",
+          density: parsed.occupancy,
+          threshold: parsed.riskLevel === "CRITICAL" ? 100 : parsed.riskLevel === "HIGH" ? 95 : 85,
+          status: "NEW",
+          assignedTo: null,
+          assignedName: null,
+          createdAt: now2,
+          updatedAt: now2,
+          instructions: parsed.recommendedMove + ": " + parsed.reason,
+          timeline: [{ action: `AI Detected ${parsed.riskLevel} condition`, actor: "AI System", time: now2, type: "critical" }]
         });
       }
       return res.json({
